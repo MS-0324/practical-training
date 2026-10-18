@@ -9,7 +9,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_required, l
 from flask_wtf import CSRFProtect, FlaskForm
 from werkzeug.security import check_password_hash, generate_password_hash
 from wtforms import DateField, IntegerField, PasswordField, SelectField, StringField, SubmitField
-from wtforms.validators import DataRequired, EqualTo, Length, NumberRange, Regexp
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange
 
 
 def get_db():
@@ -27,14 +27,17 @@ class User(UserMixin):
 
 
 class RegisterForm(FlaskForm):
-    username = StringField('ユーザー名', validators=[DataRequired(), Length(min=3, max=50), Regexp(r'^[A-Za-z0-9_]+$', message='半角英数字と_を使用してください。')])
+    email = StringField('メールアドレス', filters=[lambda value: value.strip() if value else value],
+                        validators=[DataRequired(), Length(max=254), Email(message='有効なメールアドレスを入力してください。')])
     password = PasswordField('パスワード', validators=[DataRequired(), Length(min=12, max=128)])
     confirm = PasswordField('パスワード（確認）', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('登録')
 
 
 class LoginForm(FlaskForm):
-    username = StringField('ユーザー名', validators=[DataRequired(), Length(max=50)])
+    username = StringField('メールアドレス（既存のユーザー名も使用できます）',
+                           filters=[lambda value: value.strip() if value else value],
+                           validators=[DataRequired(), Length(max=254)])
     password = PasswordField('パスワード', validators=[DataRequired(), Length(max=128)])
     submit = SubmitField('ログイン')
 
@@ -115,13 +118,13 @@ def create_app(test_config=None):
             try:
                 with db:
                     db.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                               (form.username.data, generate_password_hash(form.password.data)))
+                               (form.email.data, generate_password_hash(form.password.data)))
             except sqlite3.IntegrityError:
-                form.username.errors.append('このユーザー名は使用されています。')
+                form.email.errors.append('このメールアドレスは使用されています。')
             else:
                 flash('登録しました。ログインしてください。')
                 return redirect(url_for('login'))
-        return render_template('form.html', title='ユーザー登録', form=form)
+        return render_template('register.html', title='ユーザー登録', form=form)
 
     @app.route('/login', methods=['GET', 'POST'])
     def login():
@@ -134,7 +137,7 @@ def create_app(test_config=None):
                 login_user(User(row), remember=False)
                 session.permanent = True
                 return redirect(url_for('dashboard'))
-            form.password.errors.append('ユーザー名またはパスワードが違います。')
+            form.password.errors.append('メールアドレスまたはユーザー名、パスワードが違います。')
         return render_template('form.html', title='ログイン', form=form)
 
     @app.post('/logout')

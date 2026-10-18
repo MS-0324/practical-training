@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.app import create_app, get_db
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class AppTest(unittest.TestCase):
@@ -25,11 +25,42 @@ class AppTest(unittest.TestCase):
         return client.post(url, data={**(data or {}), 'csrf_token': token})
 
     def register(self, name='alice', client=None):
-        return self.post('/register', {'username': name, 'password': 'long-test-password',
+        return self.post('/register', {'email': name + '@example.com', 'password': 'long-test-password',
                                      'confirm': 'long-test-password'}, client)
 
     def login(self, name='alice', client=None):
-        return self.post('/login', {'username': name, 'password': 'long-test-password'}, client)
+        return self.post('/login', {'username': name + '@example.com', 'password': 'long-test-password'}, client)
+
+    def test_registration_page_and_validation(self):
+        response = self.client.get('/register')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('name="email"', html)
+        self.assertIn('type="email"', html)
+        self.assertIn('name="csrf_token"', html)
+        self.assertIn('name="confirm"', html)
+        self.assertIn('href="/login"', html)
+        valid = {'email': 'alice@example.com', 'password': 'long-test-password',
+                 'confirm': 'long-test-password'}
+        for invalid in [{'email': 'not-an-email'}, {'email': ''},
+                        {'password': 'short', 'confirm': 'short'}, {'confirm': 'different-password'}]:
+            self.assertEqual(self.post('/register', {**valid, **invalid}).status_code, 200)
+            with self.app.app_context():
+                self.assertEqual(get_db().execute('SELECT count(*) FROM users').fetchone()[0], 0)
+        response = self.post('/register', {**valid, 'email': ' alice@example.com '})
+        self.assertEqual(response.location, '/login')
+        self.assertIn('登録しました。ログインしてください。', self.client.get('/login').get_data(as_text=True))
+        self.assertIn('使用されています', self.register('ALICE').get_data(as_text=True))
+        self.assertEqual(self.login('ALICE').location, '/dashboard')
+
+    def test_existing_username_login(self):
+        with self.app.app_context():
+            db = get_db()
+            with db:
+                db.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
+                           ('legacy_user', generate_password_hash('long-test-password')))
+        response = self.post('/login', {'username': 'legacy_user', 'password': 'long-test-password'})
+        self.assertEqual(response.location, '/dashboard')
 
     def test_secret_required(self):
         with patch.dict('os.environ', {'SECRET_KEY': ''}):
@@ -62,7 +93,7 @@ class AppTest(unittest.TestCase):
         html = self.client.get('/login').get_data(as_text=True)
         old_token = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html).group(1)
         response = self.client.post('/login?next=https://example.com', data={
-            'username': 'alice', 'password': 'long-test-password', 'csrf_token': old_token})
+            'username': 'alice@example.com', 'password': 'long-test-password', 'csrf_token': old_token})
         self.assertEqual(response.location, '/dashboard')
         self.assertIn('HttpOnly', response.headers['Set-Cookie'])
         self.assertIn('SameSite=Lax', response.headers['Set-Cookie'])
