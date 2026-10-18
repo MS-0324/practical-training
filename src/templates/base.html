@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title|default('収支管理') }}</title></head>
+<body>
+<header><nav aria-label="メインナビゲーション">
+{% if current_user.is_authenticated %}
+<a href="{{ url_for('dashboard') }}">ダッシュボード</a>
+<span>{{ current_user.username }}</span>
+<form method="post" action="{{ url_for('logout') }}">{{ action_form.hidden_tag() }}<button>ログアウト</button></form>
+{% else %}<a href="{{ url_for('login') }}">ログイン</a> <a href="{{ url_for('register') }}">ユーザー登録</a>{% endif %}
+</nav></header>
+{% for message in get_flashed_messages() %}<p role="status">{{ message }}</p>{% endfor %}
+<main>{% block content %}{% endblock %}</main>
+</body></html>
