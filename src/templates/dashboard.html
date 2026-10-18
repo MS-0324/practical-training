@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>ダッシュボード</h1>
+<p>収支合計：{{ balance }}円</p>
+<a href="{{ url_for('transaction_new') }}">収支を登録</a>
+<table><caption>自分の収支一覧</caption>
+<thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>内容</th><th>操作</th></tr></thead>
+<tbody>{% for row in transactions %}
+<tr><td>{{ row.date }}</td><td>{{ '収入' if row.kind == 'income' else '支出' }}</td><td>{{ row.amount }}</td><td>{{ row.description }}</td>
+<td><a href="{{ url_for('transaction_edit', transaction_id=row.id) }}">更新</a>
+<form method="post" action="{{ url_for('transaction_delete', transaction_id=row.id) }}">{{ action_form.hidden_tag() }}<button>削除</button></form></td></tr>
+{% else %}<tr><td colspan="5">収支はまだありません。</td></tr>{% endfor %}</tbody></table>
+{% endblock %}
