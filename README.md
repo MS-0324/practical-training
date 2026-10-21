@@ -50,4 +50,6 @@ python -m unittest discover -s tests -v
 
 ### 公開運用
 
+本番用WSGI、環境変数、無料PythonAnywhereへの設定、SQLiteの移行・バックアップ手順は [公開手順](deploy/README.md) を参照してください。Render無料枠のローカルSQLiteは再起動等で失われるため使用しません。
+
 開発サーバーはローカル学習用です。公開時はHTTPSと本番用WSGIサーバーを使用し、`SESSION_COOKIE_SECURE=1`を設定してください。CookieはHttpOnlyとSameSite=Laxを設定しています。デバッグを有効にして公開しないでください。ログイン試行の回数制限、パスワード再設定、メール確認、MFAは未実装のため、一般公開前に追加してください。

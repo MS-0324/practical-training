@@ -58,7 +58,7 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY'),
-        DATABASE=str(Path(app.instance_path) / 'app.sqlite3'),
+        DATABASE=os.environ.get('DATABASE_PATH') or str(Path(app.instance_path) / 'app.sqlite3'),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
         SESSION_COOKIE_SECURE=os.environ.get('SESSION_COOKIE_SECURE') == '1',
@@ -71,6 +71,11 @@ def create_app(test_config=None):
     if not app.config['SECRET_KEY']:
         raise RuntimeError('SECRET_KEY環境変数を設定してください。')
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    database = Path(app.config['DATABASE']).expanduser()
+    if not database.is_absolute():
+        raise RuntimeError('DATABASE_PATHには絶対パスを指定してください。')
+    database.parent.mkdir(parents=True, exist_ok=True)
+    app.config['DATABASE'] = str(database)
     CSRFProtect(app)
     manager = LoginManager(app)
     manager.login_view = 'login'
