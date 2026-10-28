@@ -1,0 +1,32 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<form method="post">
+    {{ form.hidden_tag() }}
+
+    <p>
+        {{ form.month.label }}
+        {{ form.month() }}
+        {% for error in form.month.errors %}
+            <span role="alert">{{ error }}</span>
+        {% endfor %}
+    </p>
+
+    <p>
+        {{ form.amount.label }}
+        {{ form.amount(min=1, max=1000000000, step=1) }}
+        {% for error in form.amount.errors %}
+            <span role="alert">{{ error }}</span>
+        {% endfor %}
+    </p>
+
+    {{ form.submit() }}
+</form>
+
+<p>
+    <a href="{{ url_for('dashboard') }}">ダッシュボードに戻る</a>
+</p>
+{% endblock %}

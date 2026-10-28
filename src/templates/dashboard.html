@@ -2,6 +2,44 @@
 {% block content %}
 <h1>ダッシュボード</h1>
 <p>収支合計：{{ balance }}円</p>
+<hr>
+<h2>月間支出状況</h2>
+
+<form method="get" action="{{ url_for('dashboard') }}">
+    <label for="month">対象月：</label>
+    <input type="month" id="month" name="month"
+           value="{{ selected_month }}" required>
+    <button type="submit">表示</button>
+</form>
+
+<p>支出合計：{{ monthly_expense }}円</p>
+
+{% if goal_amount is not none %}
+    <p>支出上限：{{ goal_amount }}円</p>
+
+    {% if remaining_amount >= 0 %}
+        <p>残りの予算：{{ remaining_amount }}円</p>
+    {% else %}
+        <p>上限を {{ -remaining_amount }}円超過しています！</p>
+    {% endif %}
+
+    <p>予算使用率：{{ usage_percent }}%</p>
+
+    <div style="width: 100%; max-width: 400px; height: 24px; background: #ddd;">
+        <div style="width: {{ usage_bar_percent }}%; height: 24px;
+            background: green;">
+        </div>
+    </div>
+{% else %}
+    <p>この月の支出上限は未設定です。</p>
+{% endif %}
+
+<p>
+    <a href="{{ url_for('spending_goal', month=selected_month) }}">
+        この月の支出上限を設定・変更する
+    </a>
+</p>
+<hr>
 <a href="{{ url_for('transaction_new') }}">収支を登録</a>
 <table><caption>自分の収支一覧</caption>
 <thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>内容</th><th>操作</th></tr></thead>

@@ -9,7 +9,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_required, l
 from flask_wtf import CSRFProtect, FlaskForm
 from werkzeug.security import check_password_hash, generate_password_hash
 from wtforms import DateField, IntegerField, PasswordField, SelectField, StringField, SubmitField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Regexp
 
 
 def get_db():
@@ -49,6 +49,26 @@ class TransactionForm(FlaskForm):
     date = DateField('日付', validators=[DataRequired()])
     submit = SubmitField('保存')
 
+class MonthlySpendingGoalForm(FlaskForm):
+    month = StringField(
+        '対象月',
+        validators = [
+            DataRequired(),
+            Regexp(
+                r'^\d{4}-(0[1-9]|1[0-2])$',
+                message='対象月を正しく選択してください。'
+            )
+        ],
+        render_kw = {'type':'month'}
+    )
+    amount = IntegerField(
+        '支出上限(円)',
+        validators = [
+            DataRequired(),
+            NumberRange(min = 1, max = 1000000000)
+        ]
+    )
+    submit = SubmitField('目標を保存')
 
 class ActionForm(FlaskForm):
     submit = SubmitField('実行')
@@ -150,9 +170,120 @@ def create_app(test_config=None):
     @app.get('/dashboard')
     @login_required
     def dashboard():
-        rows = get_db().execute('SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC, id DESC', (current_user.id,)).fetchall()
-        balance = sum(row['amount'] if row['kind'] == 'income' else -row['amount'] for row in rows)
-        return render_template('dashboard.html', transactions=rows, balance=balance)
+        db = get_db()
+
+        rows = db.execute(
+            '''
+            SELECT * FROM transactions 
+            WHERE user_id = ? 
+            ORDER BY date DESC, id DESC
+            ''', 
+            (current_user.id,)
+        ).fetchall()
+
+        balance = sum(
+            row['amount'] if row['kind'] == 'income' else -row['amount'] 
+            for row in rows
+        )
+
+        selected_month = request.args.get(
+            'month', date.today().strftime('%Y-%m')
+        )
+
+        expense_row = db.execute(
+            '''
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM transactions
+            WHERE user_id = ?
+              AND kind = 'expense'
+              AND substr(date, 1, 7) = ?
+            ''',
+            (current_user.id, selected_month)
+        ).fetchone()
+
+        monthly_expense = expense_row['total']
+
+        goal_row = db.execute(
+            '''
+            SELECT amount
+            FROM monthly_spending_goals
+            WHERE user_id = ? AND month = ?
+            ''',
+            (current_user.id, selected_month)
+        ).fetchone()
+
+        goal_amount = goal_row['amount'] if goal_row else None
+
+        remaining_amount = (
+            goal_amount - monthly_expense
+            if goal_amount is not None else None
+        )
+
+        usage_percent = (
+            round(monthly_expense / goal_amount * 100, 1)
+            if goal_amount is not None else 0
+        )
+
+        usage_bar_percent = min(usage_percent, 100)
+
+        return render_template(
+            'dashboard.html', 
+            transactions=rows, 
+            balance=balance,
+            selected_month=selected_month,
+            monthly_expense=monthly_expense,
+            goal_amount=goal_amount,
+            remaining_amount=remaining_amount,
+            usage_percent=usage_percent,
+            usage_bar_percent=usage_bar_percent
+            )
+
+    @app.route('/goals', methods = ['GET', 'POST'])
+    @login_required
+    def spending_goal():
+        form = MonthlySpendingGoalForm()
+
+        if form.validate_on_submit():
+            db = get_db()
+            with db:
+                db.execute(
+                    '''
+                    INSERT INTO monthly_spending_goals
+                        (user_id, month, amount)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id, month)
+                    DO UPDATE SET amount = excluded.amount
+                    ''',
+                    (current_user.id, form.month.data, form.amount.data)
+                )
+            flash('支出目標を保存しました。')
+            return redirect(
+                url_for('spending_goal', month = form.month.data)
+            )
+
+        selected_month = request.args.get(
+            'month', date.today().strftime('%Y-%m')
+        )
+
+        if request.method == 'GET':
+            form.month.data = selected_month
+            row = get_db().execute(
+                '''
+                SELECT amount
+                FROM monthly_spending_goals
+                WHERE user_id = ? AND month = ?
+                ''',
+                (current_user.id, selected_month)
+            ).fetchone()
+
+            if row:
+                form.amount.data = row['amount']
+
+        return render_template(
+            'goal.html',
+            title = '月間支出目標',
+            form = form
+        )
 
     def owned_transaction(transaction_id):
         row = get_db().execute('SELECT * FROM transactions WHERE id = ? AND user_id = ?', (transaction_id, current_user.id)).fetchone()
