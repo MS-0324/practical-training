@@ -12,7 +12,7 @@ from wtforms import DateField, IntegerField, PasswordField, SelectField, StringF
 from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange
 
 
-def get_db():
+def get_db():#データベース接続
     if 'db' not in g:
         g.db = sqlite3.connect(current_app.config['DATABASE'])
         g.db.row_factory = sqlite3.Row
@@ -110,8 +110,8 @@ def create_app(test_config=None):
     def index():
         return redirect(url_for('dashboard' if current_user.is_authenticated else 'login'))
 
-    @app.route('/register', methods=['GET', 'POST'])
-    def register():
+    @app.route('/register', methods=['GET', 'POST'])#1.登録画面を表示する。2.入力された登録情報をサーバーへ送信する。
+    def register():#ユーザー登録
         form = RegisterForm()
         if form.validate_on_submit():
             db = get_db()
