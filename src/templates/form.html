@@ -1,12 +1,66 @@
 {% extends 'base.html' %}
 {% block content %}
 <h1>{{ title }}</h1>
+
 <form method="post">
-{{ form.hidden_tag() }}
-{% for field in form if field.type not in ['CSRFTokenField', 'SubmitField'] %}
-<p>{{ field.label }} {{ field() }}</p>
-{% for error in field.errors %}<p role="alert">{{ error }}</p>{% endfor %}
-{% endfor %}
-{{ form.submit() }}
+    {{ form.hidden_tag() }}
+    {% for field in form if field.type not in ['CSRFTokenField', 'SubmitField'] %}
+    <p>
+        {{ field.label }} 
+        {{ field() }}
+    </p>
+    {% for error in field.errors %}
+    <p role="alert">{{ error }}</p>
+    {% endfor %}
+    {% endfor %}
+
+    {{ form.submit() }}
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const kindSelect = document.getElementById('kind');
+    const categorySelect = document.getElementById('category');
+
+    const categories = {
+        expense: [
+            ['food', '🍚 食費'],
+            ['transport', '🚃 交通'],
+            ['housing', '🏠 住居'],
+            ['daily', '🧴 生活用品'],
+            ['education', '📚 教育'],
+            ['entertainment', '🎮 娯楽'],
+            ['medical_beauty', '💊 医療・美容'],
+            ['other', '📦 その他']
+        ],
+        income: [
+            ['salary', '💰 給与'],
+            ['allowance', '🎁 仕送り'],
+            ['temporary', '✨ 臨時収入'],
+            ['other', '💵 その他']
+        ]
+    };
+
+    function updateCategories() {
+        const previousValue = categorySelect.value;
+        const selectedKind = kindSelect.value;
+
+        categorySelect.innerHTML = '';
+
+        categories[selectedKind].forEach(function (item) {
+            const option = document.createElement('option');
+            option.value = item[0];
+            option.textContent = item[1];
+            categorySelect.appendChild(option);
+        });
+
+        if (categories[selectedKind].some(item => item[0] === previousValue)) {
+            categorySelect.value = previousValue;
+        }
+    }
+
+    kindSelect.addEventListener('change', updateCategories);
+    updateCategories();
+});
+</script>
 {% endblock %}

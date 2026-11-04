@@ -1,0 +1,51 @@
+
+{% extends 'base.html' %}
+{% block content %}
+
+<h1>{{ category_label }}</h1>
+
+<p>{{ selected_month }} のカテゴリー別履歴</p>
+
+<h2>合計：{{ "{:,}".format(total) }}円</h2>
+
+<hr>
+
+{% for row in transactions %}
+<div style="padding: 15px 5px; border-bottom: 1px solid #ddd;">
+
+    <div style="display: flex; justify-content: space-between; flex-wrap: wrap;">
+        <strong>{{ row.description }}</strong>
+        <strong>{{ "{:,}".format(row.amount) }}円</strong>
+    </div>
+
+    <p style="color: #777;">{{ row.date }}</p>
+
+    <div style="display: flex; gap: 15px;">
+
+        <a href="{{ url_for('transaction_edit', transaction_id=row.id) }}">
+            編集
+        </a>
+
+        <form method="post"
+              action="{{ url_for('transaction_delete', transaction_id=row.id) }}"
+              onsubmit="return confirm('本当に削除しますか？');">
+
+            {{ action_form.hidden_tag() }}
+
+            <button type="submit">削除</button>
+        </form>
+
+    </div>
+</div>
+
+{% else %}
+<p>このカテゴリーの登録履歴はありません。</p>
+{% endfor %}
+
+<hr>
+
+<a href="{{ url_for('dashboard', month=selected_month) }}">
+    ダッシュボードに戻る
+</a>
+
+{% endblock %}
