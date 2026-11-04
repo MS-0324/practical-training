@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     kind TEXT NOT NULL CHECK(kind IN ('income', 'expense')),
     amount INTEGER NOT NULL CHECK(amount > 0 AND amount <= 1000000000),
     description TEXT NOT NULL CHECK(length(description) BETWEEN 1 AND 200),
+    category TEXT NOT NULL DEFAULT 'uncategorized',
     date TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS transactions_owner_date ON transactions(user_id, date);
