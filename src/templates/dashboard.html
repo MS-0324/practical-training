@@ -40,12 +40,19 @@
     </a>
 </p>
 <hr>
-<a href="{{ url_for('transaction_new') }}">収支を登録</a>
+<p id="save-status" role="status" aria-live="polite"></p>
+<details id="add-panel" {% if panel_open or request.args.get('add') == '1' %}open{% endif %}>
+<summary>＋ 収支を追加</summary>
+<form method="post" action="{{ url_for('dashboard', month=selected_month) }}" data-transaction-form>
+{% include 'transaction_fields.html' %}
+<button type="button" id="cancel-add">キャンセル</button>
+</form>
+</details>
 <table><caption>自分の収支一覧</caption>
-<thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>内容</th><th>操作</th></tr></thead>
+<thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>カテゴリ</th><th>メモ</th><th>操作</th></tr></thead>
 <tbody>{% for row in transactions %}
-<tr><td>{{ row.date }}</td><td>{{ '収入' if row.kind == 'income' else '支出' }}</td><td>{{ row.amount }}</td><td>{{ row.description }}</td>
+<tr><td>{{ row.date }}</td><td>{{ '収入' if row.kind == 'income' else '支出' }}</td><td>{{ row.amount }}</td><td>{{ category_labels.get(row.category, '未分類') }}</td><td>{{ row.description }}</td>
 <td><a href="{{ url_for('transaction_edit', transaction_id=row.id) }}">更新</a>
 <form method="post" action="{{ url_for('transaction_delete', transaction_id=row.id) }}">{{ action_form.hidden_tag() }}<button>削除</button></form></td></tr>
-{% else %}<tr><td colspan="5">収支はまだありません。</td></tr>{% endfor %}</tbody></table>
+{% else %}<tr><td colspan="6">収支はまだありません。</td></tr>{% endfor %}</tbody></table>
 {% endblock %}

@@ -9,3 +9,5 @@ instance/
 *.sqlite
 *.sqlite3
 .pytest_cache/
+
+*.before-categories-*.bak

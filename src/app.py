@@ -3,13 +3,16 @@ import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
+from .categories import CATEGORIES, CATEGORY_LABELS
+from .migration import migrate_categories
+
 import click
 from flask import Flask, abort, current_app, flash, g, redirect, render_template, request, session, url_for
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_wtf import CSRFProtect, FlaskForm
 from werkzeug.security import check_password_hash, generate_password_hash
 from wtforms import DateField, IntegerField, PasswordField, SelectField, StringField, SubmitField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Regexp
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Regexp, ValidationError
 
 
 def get_db():
@@ -45,7 +48,15 @@ class LoginForm(FlaskForm):
 class TransactionForm(FlaskForm):
     kind = SelectField('種別', choices=[('income', '収入'), ('expense', '支出')])
     amount = IntegerField('金額（円）', validators=[DataRequired(), NumberRange(min=1, max=1000000000)])
-    description = StringField('内容', validators=[DataRequired(), Length(max=200)])
+    category = SelectField('カテゴリ', choices=[(key, icon + ' ' + label) for key, kind, icon, label in CATEGORIES], validators=[DataRequired()])
+    description = StringField('メモ（任意）', validators=[Length(max=200)])
+
+    def validate_category(self, field):
+        if field.data == 'uncategorized' and getattr(self, 'allow_uncategorized', False):
+            return
+        if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in CATEGORIES):
+            raise ValidationError('種別に合うカテゴリを選択してください。')
+
     date = DateField('日付', validators=[DataRequired()])
     submit = SubmitField('保存')
 
@@ -91,6 +102,7 @@ def create_app(test_config=None):
     if not app.config['SECRET_KEY']:
         raise RuntimeError('SECRET_KEY環境変数を設定してください。')
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    migrate_categories(app.config['DATABASE'])
     CSRFProtect(app)
     manager = LoginManager(app)
     manager.login_view = 'login'
@@ -113,11 +125,12 @@ def create_app(test_config=None):
     def init_db():
         with app.open_resource('schema.sql') as schema:
             get_db().executescript(schema.read().decode('utf-8'))
+        migrate_categories(app.config['DATABASE'])
         click.echo('データベースを初期化しました（既存データは保持）。')
 
     @app.context_processor
     def action_form():
-        return {'action_form': ActionForm()}
+        return {'action_form': ActionForm(), 'categories': CATEGORIES, 'category_labels': CATEGORY_LABELS}
 
     @app.after_request
     def private_response(response):
@@ -167,9 +180,16 @@ def create_app(test_config=None):
         session.clear()
         return redirect(url_for('login'))
 
-    @app.get('/dashboard')
+    @app.route('/dashboard', methods=['GET', 'POST'])
     @login_required
     def dashboard():
+        form = TransactionForm()
+        if request.method == 'GET':
+            form.kind.data = 'expense'
+            form.date.data = date.today()
+        if form.validate_on_submit():
+            save_transaction(form)
+            return redirect(url_for('dashboard', month=request.args.get('month')))
         db = get_db()
 
         rows = db.execute(
@@ -235,6 +255,7 @@ def create_app(test_config=None):
             goal_amount=goal_amount,
             remaining_amount=remaining_amount,
             usage_percent=usage_percent,
+            form=form, panel_open=request.method == 'POST',
             usage_bar_percent=usage_bar_percent
             )
 
@@ -291,33 +312,40 @@ def create_app(test_config=None):
             abort(404)
         return row
 
+    def save_transaction(form):
+        db = get_db()
+        with db:
+            db.execute('INSERT INTO transactions (user_id, kind, amount, description, date, category) VALUES (?, ?, ?, ?, ?, ?)',
+                       (current_user.id, form.kind.data, form.amount.data,
+                        form.description.data or CATEGORY_LABELS[form.category.data],
+                        form.date.data.isoformat(), form.category.data))
+
     @app.route('/transactions/new', methods=['GET', 'POST'])
     @login_required
     def transaction_new():
-        form = TransactionForm()
-        if form.validate_on_submit():
-            db = get_db()
-            with db:
-                db.execute('INSERT INTO transactions (user_id, kind, amount, description, date) VALUES (?, ?, ?, ?, ?)',
-                           (current_user.id, form.kind.data, form.amount.data, form.description.data, form.date.data.isoformat()))
-            return redirect(url_for('dashboard'))
-        return render_template('form.html', title='収支登録', form=form)
+        if request.method == 'GET':
+            return redirect(url_for('dashboard', add='1'))
+        return dashboard()
 
     @app.route('/transactions/<int:transaction_id>/edit', methods=['GET', 'POST'])
     @login_required
     def transaction_edit(transaction_id):
         row = owned_transaction(transaction_id)
         form = TransactionForm()
+        form.allow_uncategorized = row['category'] == 'uncategorized'
+        if form.allow_uncategorized:
+            form.category.choices.append(('uncategorized', '未分類'))
         if request.method == 'GET':
             form.kind.data, form.amount.data, form.description.data = row['kind'], row['amount'], row['description']
             form.date.data = date.fromisoformat(row['date'])
+            form.category.data = row['category']
         if form.validate_on_submit():
             db = get_db()
             with db:
-                db.execute('UPDATE transactions SET kind = ?, amount = ?, description = ?, date = ? WHERE id = ? AND user_id = ?',
-                           (form.kind.data, form.amount.data, form.description.data, form.date.data.isoformat(), transaction_id, current_user.id))
+                db.execute('UPDATE transactions SET kind = ?, amount = ?, description = ?, date = ?, category = ? WHERE id = ? AND user_id = ?',
+                           (form.kind.data, form.amount.data, form.description.data or CATEGORY_LABELS[form.category.data], form.date.data.isoformat(), form.category.data, transaction_id, current_user.id))
             return redirect(url_for('dashboard'))
-        return render_template('form.html', title='収支更新', form=form)
+        return render_template('transaction_edit.html', title='収支更新', form=form)
 
     @app.post('/transactions/<int:transaction_id>/delete')
     @login_required

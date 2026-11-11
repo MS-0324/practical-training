@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post" data-transaction-form>{% include 'transaction_fields.html' %}</form>
+<p><a href="{{ url_for('dashboard') }}">一覧へ戻る</a></p>
+{% endblock %}

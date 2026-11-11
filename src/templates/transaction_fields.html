@@ -1,0 +1,21 @@
+{{ form.hidden_tag() }}
+<div class="transaction-fields">
+<p>{{ form.kind.label }} {{ form.kind() }}</p>
+<fieldset><legend>カテゴリを選択</legend>
+<div class="category-grid">
+{% for key, kind, icon, label in categories %}
+<label class="category-option" data-kind="{{ kind }}">
+<input type="radio" name="category" value="{{ key }}" {% if form.category.data == key %}checked{% endif %} required>
+<span><span aria-hidden="true">{{ icon }}</span> {{ label }}</span>
+</label>
+{% endfor %}
+{% if form.allow_uncategorized|default(false) %}
+<label class="category-option"><input type="radio" name="category" value="uncategorized" {% if form.category.data == 'uncategorized' %}checked{% endif %}>未分類</label>
+{% endif %}
+</div></fieldset>
+<p>{{ form.amount.label }} {{ form.amount(min=1, max=1000000000, step=1, inputmode='numeric', required=true) }}</p>
+<p>{{ form.date.label }} {{ form.date(required=true) }}</p>
+<p>{{ form.description.label }} {{ form.description(maxlength=200) }}</p>
+{% for field in form %}{% for error in field.errors %}<p role="alert">{{ field.label.text }}：{{ error }}</p>{% endfor %}{% endfor %}
+{{ form.submit() }}
+</div>
