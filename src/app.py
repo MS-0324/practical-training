@@ -3,6 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
+from .analysis import monthly_expense_reports
 from .categories import CATEGORIES, CATEGORY_LABELS
 from .migration import migrate_categories
 
@@ -17,7 +18,7 @@ from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange
 
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect(current_app.config['DATABASE'])
+        g.db = sqlite3.connect(current_app.config['DATABASE'])#g.dbの定義
         g.db.row_factory = sqlite3.Row
         g.db.execute('PRAGMA foreign_keys = ON')
     return g.db
@@ -51,7 +52,7 @@ class TransactionForm(FlaskForm):
     category = SelectField('カテゴリ', choices=[(key, icon + ' ' + label) for key, kind, icon, label in CATEGORIES], validators=[DataRequired()])
     description = StringField('メモ（任意）', validators=[Length(max=200)])
 
-    def validate_category(self, field):
+    def validate_category(self, field):#選択したカテゴリと収入・支出の組み合わせを確認する。「支出なのに給料を選んでいる」といった入力を拒否する役割。カテゴリ一覧は別ファイルの categories.py から取得している。
         if field.data == 'uncategorized' and getattr(self, 'allow_uncategorized', False):
             return
         if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in CATEGORIES):
@@ -86,7 +87,7 @@ class ActionForm(FlaskForm):
 
 
 def create_app(test_config=None):
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(__name__, instance_relative_config=True)#インスタンス
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY'),
         DATABASE=str(Path(app.instance_path) / 'app.sqlite3'),
@@ -256,6 +257,7 @@ def create_app(test_config=None):
             remaining_amount=remaining_amount,
             usage_percent=usage_percent,
             form=form, panel_open=request.method == 'POST',
+            expense_reports=monthly_expense_reports(db, current_user.id),
             usage_bar_percent=usage_bar_percent
             )
 

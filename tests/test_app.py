@@ -201,6 +201,51 @@ class AppTest(unittest.TestCase):
         self.assertIn('value="uncategorized" checked', self.client.get('/transactions/1/edit').get_data(as_text=True))
         self.assertEqual(self.post('/transactions/1/edit', {'kind': 'expense', 'category': 'uncategorized', 'amount': '20', 'date': '2026-11-01'}).status_code, 302)
 
+    def test_monthly_analysis_updates_after_add_edit_delete(self):
+        from flask import template_rendered
+
+        self.register()
+        self.login()
+        self.assertIn('まだ分析できる収支の記録がありません。',
+                      self.client.get('/dashboard').get_data(as_text=True))
+
+        def reports():
+            contexts = []
+
+            def capture(sender, template, context, **extra):
+                contexts.append(context)
+
+            with template_rendered.connected_to(capture, self.app):
+                # Selecting a different budget month must not hide older reports.
+                response = self.client.get('/dashboard?month=2030-01')
+            self.assertEqual(response.status_code, 200)
+            return contexts[-1]['expense_reports'], response.get_data(as_text=True)
+
+        data = {'kind': 'expense', 'category': 'food', 'amount': '750', 'date': '2026-11-01'}
+        self.assertEqual(self.post('/dashboard', data).status_code, 302)
+        current, html = reports()
+        self.assertEqual(current[0]['total'], 750)
+        self.assertIn('conic-gradient(', html)
+        self.assertIn('100.0%', html)
+        self.assertIn('750 円', html)
+
+        # Moving a record to another month/category must update both reports.
+        self.post('/dashboard', {**data, 'kind': 'income', 'category': 'salary', 'amount': '2000'})
+        self.assertEqual(self.post('/transactions/1/edit', {
+            **data, 'category': 'transport', 'amount': '500', 'date': '2026-12-01',
+        }).status_code, 302)
+        current, html = reports()
+        self.assertEqual([r['month'] for r in current], ['2026-12', '2026-11'])
+        self.assertEqual([r['total'] for r in current], [500, 0])
+        self.assertEqual(current[0]['categories'][0]['key'], 'transport')
+        self.assertIn('前月は支出0円のため', html)
+        self.assertIn('この月は支出の記録がありません。', html)
+
+        self.assertEqual(self.post('/transactions/1/delete', page='/dashboard').status_code, 302)
+        current, html = reports()
+        self.assertEqual([r['month'] for r in current], ['2026-11'])
+        self.assertNotIn('conic-gradient(', html)
+
 
 if __name__ == '__main__':
     unittest.main()

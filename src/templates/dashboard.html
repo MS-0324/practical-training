@@ -1,9 +1,16 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>ダッシュボード</h1>
-<p>収支合計：{{ balance }}円</p>
-<hr>
-<h2>月間支出状況</h2>
+<div class="dashboard-heading">
+    <div><p class="analysis-eyebrow">毎日の記録から、お金の使い方を知る</p><h1>ダッシュボード</h1></div>
+    <nav class="dashboard-shortcuts" aria-label="ページ内移動">
+        <a href="#add-panel">収支の入力欄 ↓</a>
+        <a href="#expense-analysis">月別グラフ・分析 ↓</a>
+        <a href="#transaction-history">収支一覧 ↓</a>
+    </nav>
+</div>
+<section class="monthly-overview" aria-labelledby="overview-title">
+<div class="overview-heading">
+<h2 id="overview-title">月間支出状況</h2>
 
 <form method="get" action="{{ url_for('dashboard') }}">
     <label for="month">対象月：</label>
@@ -11,25 +18,21 @@
            value="{{ selected_month }}" required>
     <button type="submit">表示</button>
 </form>
-
-<p>支出合計：{{ monthly_expense }}円</p>
-
+</div>
+<div class="overview-metrics">
+    <div><span>収支合計 <small>全期間</small></span><strong>{{ '{:,}'.format(balance) }}<small> 円</small></strong></div>
+    <div><span>支出合計 <small>{{ selected_month }}</small></span><strong>{{ '{:,}'.format(monthly_expense) }}<small> 円</small></strong></div>
+    <div><span>残りの予算 <small>{{ selected_month }}</small></span>
+    {% if remaining_amount is not none %}<strong class="{{ 'over-budget' if remaining_amount < 0 else '' }}">{{ '{:,}'.format(remaining_amount) }}<small> 円</small></strong>
+    {% else %}<strong class="budget-unset">上限未設定</strong>{% endif %}</div>
+</div>
+<div class="budget-detail">
 {% if goal_amount is not none %}
-    <p>支出上限：{{ goal_amount }}円</p>
-
-    {% if remaining_amount >= 0 %}
-        <p>残りの予算：{{ remaining_amount }}円</p>
-    {% else %}
-        <p>上限を {{ -remaining_amount }}円超過しています！</p>
-    {% endif %}
-
-    <p>予算使用率：{{ usage_percent }}%</p>
-
-    <div style="width: 100%; max-width: 400px; height: 24px; background: #ddd;">
-        <div style="width: {{ usage_bar_percent }}%; height: 24px;
-            background: green;">
-        </div>
+    <p>支出上限：{{ '{:,}'.format(goal_amount) }}円 <span>予算使用率：{{ usage_percent }}%</span></p>
+    <div class="budget-progress {{ 'is-over' if remaining_amount < 0 else '' }}" role="progressbar" aria-label="予算使用率" aria-valuenow="{{ usage_bar_percent }}" aria-valuemin="0" aria-valuemax="100" aria-valuetext="{{ usage_percent }}%">
+        <div style="width: {{ usage_bar_percent }}%;"></div>
     </div>
+    {% if remaining_amount < 0 %}<p class="over-budget">上限を {{ '{:,}'.format(-remaining_amount) }}円超過しています。</p>{% endif %}
 {% else %}
     <p>この月の支出上限は未設定です。</p>
 {% endif %}
@@ -39,7 +42,8 @@
         この月の支出上限を設定・変更する
     </a>
 </p>
-<hr>
+</div>
+</section>
 <p id="save-status" role="status" aria-live="polite"></p>
 <details id="add-panel" {% if panel_open or request.args.get('add') == '1' %}open{% endif %}>
 <summary>＋ 収支を追加</summary>
@@ -48,11 +52,18 @@
 <button type="button" id="cancel-add">キャンセル</button>
 </form>
 </details>
-<table><caption>自分の収支一覧</caption>
+{% include 'expense_reports.html' %}
+<section id="transaction-history" class="transaction-history" aria-labelledby="history-title">
+<h2 id="history-title">収支一覧</h2>
+<p class="analysis-note">全期間の記録を新しい順に表示します。</p>
+<div class="transaction-table-scroll" role="region" aria-label="全期間の収支一覧" tabindex="0">
+<table><caption class="visually-hidden">自分の収支一覧</caption>
 <thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>カテゴリ</th><th>メモ</th><th>操作</th></tr></thead>
 <tbody>{% for row in transactions %}
-<tr><td>{{ row.date }}</td><td>{{ '収入' if row.kind == 'income' else '支出' }}</td><td>{{ row.amount }}</td><td>{{ category_labels.get(row.category, '未分類') }}</td><td>{{ row.description }}</td>
+<tr><td>{{ row.date }}</td><td>{{ '収入' if row.kind == 'income' else '支出' }}</td><td>{{ '{:,}'.format(row.amount) }}</td><td>{{ category_labels.get(row.category, '未分類') }}</td><td>{{ row.description }}</td>
 <td><a href="{{ url_for('transaction_edit', transaction_id=row.id) }}">更新</a>
 <form method="post" action="{{ url_for('transaction_delete', transaction_id=row.id) }}">{{ action_form.hidden_tag() }}<button>削除</button></form></td></tr>
 {% else %}<tr><td colspan="6">収支はまだありません。</td></tr>{% endfor %}</tbody></table>
+</div>
+</section>
 {% endblock %}

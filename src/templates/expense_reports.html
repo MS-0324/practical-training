@@ -1,0 +1,79 @@
+<section id="expense-analysis" class="expense-analysis" aria-labelledby="analysis-title">
+  <div class="analysis-heading">
+    <div>
+      <p class="analysis-eyebrow">支出のふりかえり</p>
+      <h2 id="analysis-title">月別の支出分析</h2>
+    </div>
+    <span class="analysis-badge">全 {{ expense_reports|length }} か月</span>
+  </div>
+  <p class="analysis-description">収支の記録がある全月を新しい順に表示します。円グラフは、その月の支出合計に占めるカテゴリ別の割合です。収入は含みません。</p>
+  {% if expense_reports %}
+  <nav class="analysis-months" aria-label="月別分析へ移動">
+    {% for report in expense_reports %}<a href="#expense-{{ report.month }}">{{ report.label }}</a>{% endfor %}
+  </nav>
+  <p class="analysis-note">前月比は直前の暦月と比較します。月の途中の記録や未入力分があると、比較結果も変わります。</p>
+  <div class="monthly-reports">
+    {% for report in expense_reports %}
+    <article id="expense-{{ report.month }}" class="monthly-report" aria-labelledby="expense-title-{{ report.month }}">
+      <header class="report-heading">
+        <div>
+          <h3 id="expense-title-{{ report.month }}">{{ report.label }}</h3>
+          <p class="analysis-note">支出 {{ report.count }} 件 ・ {{ report.categories|length }} カテゴリ</p>
+        </div>
+        <div class="report-total"><span>支出合計</span><strong>{{ '{:,}'.format(report.total) }}<small> 円</small></strong></div>
+      </header>
+      {% if report.total %}
+      <div class="report-breakdown">
+        <figure class="expense-figure">
+          <div class="expense-pie" role="img" aria-label="{{ report.label }}のカテゴリ別支出の円グラフ。各カテゴリの金額と割合は内訳表に記載。" style="background: {{ report.gradient }};"></div>
+          <figcaption>カテゴリ別の支出割合</figcaption>
+        </figure>
+        <div class="category-breakdown">
+          <table class="expense-table">
+            <caption>{{ report.label }}の支出内訳（金額順）</caption>
+            <thead><tr><th scope="col">カテゴリ</th><th scope="col">金額</th><th scope="col">割合</th></tr></thead>
+            <tbody>
+              {% for category in report.categories %}
+              <tr>
+                <th scope="row"><span class="category-swatch" style="background-color: {{ category.color }};" aria-hidden="true"></span>{{ category.label }}</th>
+                <td>{{ '{:,}'.format(category.amount) }} 円</td>
+                <td>{{ category.percentage_label }}%</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot><tr><th scope="row">合計</th><td>{{ '{:,}'.format(report.total) }} 円</td><td>100%</td></tr></tfoot>
+          </table>
+          <p class="analysis-note">割合は小数第1位に丸めているため、合計が100%にならない場合があります。</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="report-empty">この月は支出の記録がありません。支出を追加すると円グラフと内訳が表示されます。</p>
+      {% endif %}
+      <dl class="report-insights">
+        <div>
+          <dt>最も支出が多いカテゴリ</dt>
+          {% if report.top_categories %}
+          <dd>{{ report.top_categories|map(attribute='label')|join('・') }}{% if report.top_categories|length > 1 %}（同額）{% endif %}</dd>
+          <dd class="insight-detail">{{ '{:,}'.format(report.top_categories[0].amount) }} 円 ・ {{ report.top_categories[0].percentage_label }}%</dd>
+          {% else %}<dd>支出なし</dd>{% endif %}
+        </div>
+        <div>
+          <dt>前月比 <span>（{{ report.previous_month }}）</span></dt>
+          {% if report.change is not none %}
+          <dd class="{{ 'expense-increase' if report.change > 0 else 'expense-decrease' if report.change < 0 else '' }}">{{ '+' if report.change > 0 else '−' if report.change < 0 else '' }}{{ '{:,}'.format(report.change|abs) }} 円</dd>
+          <dd class="insight-detail">{% if report.change == 0 %}前月と同じ支出額{% elif report.change_percent is none %}前月は支出0円のため、増減率は算出できません。{% elif report.change > 0 %}{{ '%.1f'|format(report.change_percent) }}% 増加{% else %}{{ '%.1f'|format(report.change_percent) }}% 減少{% endif %}</dd>
+          {% else %}<dd class="insight-detail">前月の収支記録がないため比較できません。</dd>{% endif %}
+        </div>
+        <div>
+          <dt>支出1件あたりの平均</dt>
+          <dd>{{ '{:,}'.format(report.average) }} 円</dd>
+          <dd class="insight-detail">{% if report.count %}支出合計 ÷ {{ report.count }} 件（円単位に丸め）{% else %}支出の記録は0件です{% endif %}</dd>
+        </div>
+      </dl>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="analysis-empty"><p>まだ分析できる収支の記録がありません。</p><p>「＋ 収支を追加」から記録を始めましょう。</p></div>
+  {% endif %}
+</section>
