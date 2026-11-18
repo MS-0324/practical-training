@@ -1,16 +1,55 @@
 import os
 import sqlite3
+import requests
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import click
-from flask import Flask, abort, current_app, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, abort, current_app, flash, g, redirect, render_template, request, session, url_for, jsonify
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_wtf import CSRFProtect, FlaskForm
 from werkzeug.security import check_password_hash, generate_password_hash
-from wtforms import DateField, IntegerField, PasswordField, SelectField, StringField, SubmitField
+from wtforms import DateField, IntegerField, TextAreaField, PasswordField, SelectField, StringField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Regexp
 
+def search_yahoo_product(jan_code):
+    client_id = os.environ.get('YAHOO_CLIENT_ID')
+
+    if not client_id:
+        return None
+
+    url = 'https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch'
+
+    params = {
+        'appid': client_id,
+        'jan_code': jan_code,
+        'results': 1
+    }
+
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=10
+        )
+        response.raise_for_status()
+        current_app.logger.info(f'検索したJANコード: {jan_code}')
+
+        data = response.json()
+        hits = data.get('hits', [])
+        current_app.logger.info(f'Yahoo検索結果: {data}')
+
+        if hits and hits[0].get('janCode') == jan_code:
+            return hits[0].get('name')
+
+        return None
+
+    except requests.RequestException as error:
+        current_app.logger.error(
+            f'Yahoo!商品検索エラー: {error}'
+        )
+        return None
+    
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(current_app.config['DATABASE'])
@@ -47,7 +86,8 @@ income_categories = [('salary','💰給与'),('allowance','🎁仕送り'),('tem
 class TransactionForm(FlaskForm):
     kind = SelectField('種別', choices=[('income', '収入'), ('expense', '支出')])
     amount = IntegerField('金額（円）', validators=[DataRequired(), NumberRange(min=1, max=1000000000)])
-    description = StringField('内容', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('内容', validators=[DataRequired(), Length(max=200)],
+                                render_kw={'rows': 5,'styale': 'width:100%; box-sizing:border-box; resize:vertical;'})
     category = SelectField('カテゴリー', choices=[],validators=[DataRequired()])
     date = DateField('日付', validators=[DataRequired()])
     submit = SubmitField('保存')
@@ -177,6 +217,18 @@ def create_app(test_config=None):
         logout_user()
         session.clear()
         return redirect(url_for('login'))
+
+    @app.get('/api/product/<jan_code>')
+    @login_required
+    def api_product(jan_code):
+        if not jan_code.isdigit():
+            return jsonify({'product_name': None}), 400
+
+        product_name = search_yahoo_product(jan_code)
+
+        return jsonify({
+            'product_name': product_name
+        })
 
     @app.get('/dashboard')
     @login_required

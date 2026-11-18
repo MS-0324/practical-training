@@ -1,6 +1,68 @@
 {% extends 'base.html' %}
 {% block content %}
 <h1>{{ title }}</h1>
+{% if title == '収支登録' %}
+<div style="margin:20px 0; padding:15px; border:1px solid #ddd;
+            border-radius:10px;">
+
+    <h2>📷 レシートから自動入力</h2>
+
+    <p>レシートを撮影するか、画像を選択してください。</p>
+
+    <input type="file"
+           id="receipt-image"
+           accept="image/*"
+           capture="environment">
+
+    <div style="margin-top:10px;">
+        <img id="receipt-preview"
+             style="display:none; max-width:100%; max-height:300px;
+                    border-radius:8px;">
+    </div>
+
+    <button type="button"
+            id="read-receipt"
+            style="margin-top:10px; padding:10px 15px;">
+        レシートを読み取る
+    </button>
+
+    <p id="ocr-status" style="color:#666;"></p>
+</div>
+
+<div style="margin:20px 0; padding:15px; border:1px solid #ddd;
+            border-radius:10px;">
+    <h2>📦 商品バーコード読み取り</h2>
+
+    <p>商品のバーコードをカメラに映してください。</p>
+
+    <button type="button" id="start-barcode">
+        カメラを起動
+    </button>
+
+    <button type="button" id="stop-barcode" disabled>
+        カメラを停止
+    </button>
+
+    <div id="barcode-camera"
+     style="display:none; position:relative;
+            width:100%; max-width:400px;">
+
+    <video id="barcode-video"
+           style="width:100%; display:block;"
+           autoplay playsinline></video>
+    
+    <canvas id="barcode-overlay"
+            style="position:absolute;
+                   top:0;
+                   left:0;
+                   width:100%;
+                   height:100%;
+                   pointer-events:none;">
+    </canvas>
+</div>
+    <p id="barcode-status" style="color:#666;"></p>
+</div>
+{% endif %}
 
 <form method="post">
     {{ form.hidden_tag() }}
@@ -63,4 +125,10 @@ document.addEventListener('DOMContentLoaded', function () {
     updateCategories();
 });
 </script>
+{% if title == '収支登録' %}
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://unpkg.com/@zxing/browser@0.1.5"></script>
+<script src="{{ url_for('static', filename='js/receipt_ocr.js') }}"></script>
+<script src="{{ url_for('static', filename='js/barcode.js') }}"></script>
+{% endif %}
 {% endblock %}
