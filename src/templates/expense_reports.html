@@ -25,7 +25,10 @@
       {% if report.total %}
       <div class="report-breakdown">
         <figure class="expense-figure">
-          <div class="expense-pie" role="img" aria-label="{{ report.label }}のカテゴリ別支出の円グラフ。各カテゴリの金額と割合は内訳表に記載。" style="background: {{ report.gradient }};"></div>
+          <div class="expense-pie" role="img" aria-label="{{ report.label }}のカテゴリ別支出のドーナツグラフ。合計{{ '{:,}'.format(report.total) }}円。各カテゴリの金額と割合は内訳表に記載。" style="background: {{ report.gradient }};">
+            <span class="expense-pie-separators" style="background: {{ report.separator_gradient }};" aria-hidden="true"></span>
+            <span class="expense-pie-center" aria-hidden="true"><span>支出合計</span><strong>{{ '{:,}'.format(report.total) }}</strong><small>円</small></span>
+          </div>
           <figcaption>カテゴリ別の支出割合</figcaption>
         </figure>
         <div class="category-breakdown">
@@ -34,10 +37,13 @@
             <thead><tr><th scope="col">カテゴリ</th><th scope="col">金額</th><th scope="col">割合</th></tr></thead>
             <tbody>
               {% for category in report.categories %}
-              <tr>
+              <tr class="expense-category-row">
                 <th scope="row"><span class="category-swatch" style="background-color: {{ category.color }};" aria-hidden="true"></span>{{ category.label }}</th>
                 <td>{{ '{:,}'.format(category.amount) }} 円</td>
                 <td>{{ category.percentage_label }}%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: {{ category.percentage }}%; background-color: {{ category.color }};"></div></div></td>
               </tr>
               {% endfor %}
             </tbody>

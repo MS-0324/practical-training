@@ -71,7 +71,11 @@ th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #475569; ove
 .report-total small { font-size: .9rem; font-weight: normal; }
 .report-breakdown { display: grid; grid-template-columns: minmax(200px, .8fr) minmax(0, 1.5fr); align-items: start; gap: 2rem; padding: 1.5rem 0; }
 .expense-figure { margin: 0; display: grid; justify-items: center; gap: 1rem; padding: 1rem 0; }
-.expense-pie { width: 240px; max-width: 100%; box-sizing: border-box; aspect-ratio: 1; border-radius: 50%; border: 3px solid #26364e; }
+.expense-pie { position: relative; width: 260px; max-width: 100%; box-sizing: border-box; aspect-ratio: 1; border-radius: 50%; }
+.expense-pie-separators { position: absolute; inset: 0; border-radius: 50%; }
+.expense-pie-center { position: absolute; inset: 17%; border-radius: 50%; background: #131f32; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; padding: .5rem; }
+.expense-pie-center > span, .expense-pie-center small { color: #b6c5d9; font-size: .75rem; }
+.expense-pie-center strong { max-width: 100%; font-size: 1.2rem; font-variant-numeric: tabular-nums; text-align: center; overflow-wrap: anywhere; }
 .expense-figure figcaption { color: #b6c5d9; font-size: .85rem; }
 .category-breakdown { min-width: 0; }
 .expense-table { font-size: .9rem; }
@@ -82,7 +86,11 @@ th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #475569; ove
 .expense-table td, .expense-table thead th:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .expense-table tbody tr:hover { background: #1e304a; }
 .expense-table tfoot { font-weight: bold; }
-.category-swatch { display: inline-block; width: .65rem; height: .65rem; border-radius: .15rem; margin-right: .5rem; border: 1px solid #ffffff30; }
+.category-swatch { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; margin-right: .5rem; border: 1px solid #ffffff80; box-shadow: inset 0 0 0 3px #131f32; vertical-align: middle; }
+.expense-table .expense-category-row > * { border-bottom: 0; padding-bottom: .4rem; }
+.expense-table .expense-category-bar-row td { padding: 0 .45rem .85rem; }
+.expense-category-track { height: .5rem; background: #26364e; border-radius: 1rem; overflow: hidden; }
+.expense-category-track > div { height: 100%; border-radius: inherit; }
 .report-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding-top: 1rem; border-top: 1px solid #334155; }
 .report-insights > div { padding: 1rem; background: #0b1627; border-radius: .6rem; }
 .report-insights dt { font-size: .8rem; color: #b6c5d9; }
@@ -100,7 +108,7 @@ th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #475569; ove
   .monthly-report { padding: 1rem; }
   .report-breakdown { grid-template-columns: 1fr; gap: .5rem; }
   .report-insights { grid-template-columns: 1fr; gap: .65rem; }
-  .expense-pie { width: 210px; }
+  .expense-pie { width: 240px; }
   .report-total strong { font-size: 1.5rem; }
   .expense-table th, .expense-table td { padding: .65rem .25rem; }
 }

@@ -52,6 +52,7 @@ def monthly_expense_reports(db, user_id):
         categories = sorted(report['categories'], key=lambda item: (-item['amount'], item['key']))
         report['categories'] = categories
         stops = []
+        separators = []
         cumulative = 0
         for category in categories:
             percentage = category['amount'] / report['total'] * 100
@@ -61,7 +62,18 @@ def monthly_expense_reports(db, user_id):
             cumulative += category['amount']
             end = cumulative / report['total'] * 100
             stops.append(f"{category['color']} {start:.6f}% {end:.6f}%")
+            # Thin white boundaries; shrink them for tiny slices so the color
+            # remains visible. The underlying category angles stay unchanged.
+            gap = min(0.2, percentage * 0.1)
+            separators.extend([
+                f'#f8fafc {start:.9f}% {start + gap:.9f}%',
+                f'transparent {start + gap:.9f}% {end - gap:.9f}%',
+                f'#f8fafc {end - gap:.9f}% {end:.9f}%',
+            ])
         report['gradient'] = f"conic-gradient({', '.join(stops)})" if stops else None
+        report['separator_gradient'] = (
+            f"conic-gradient({', '.join(separators)})" if len(categories) > 1 else 'none'
+        )
         report['average'] = round(report['total'] / report['count']) if report['count'] else 0
         report['top_categories'] = [item for item in categories if item['amount'] == categories[0]['amount']] if categories else []
 
