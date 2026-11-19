@@ -1,5 +1,8 @@
 """Monthly expense reports built from the signed-in user's records."""
 
+from calendar import monthrange
+from datetime import date
+
 from .categories import CATEGORIES
 from .custom_categories import category_labels, custom_category_color
 
@@ -14,12 +17,14 @@ EXPENSE_COLORS = dict(zip(
 ))
 
 
-def monthly_expense_reports(db, user_id):
+def monthly_expense_reports(db, user_id, *, today=None):
     """Return newest-first reports for every month with this user's records.
 
     Income creates a month entry but is excluded from expense totals and pies.
     Comparisons always refer to the preceding calendar month, even across years.
     """
+    today = today or date.today()
+    current_month = (today.year, today.month)
     labels = category_labels(db, user_id)
     rows = db.execute(
         '''SELECT substr(date, 1, 7) AS month, kind, category,
@@ -76,10 +81,19 @@ def monthly_expense_reports(db, user_id):
         report['separator_gradient'] = (
             f"conic-gradient({', '.join(separators)})" if len(categories) > 1 else 'none'
         )
-        report['average'] = round(report['total'] / report['count']) if report['count'] else 0
         report['top_categories'] = [item for item in categories if item['amount'] == categories[0]['amount']] if categories else []
 
         year, month_number = map(int, month.split('-'))
+        report_month = (year, month_number)
+        if report_month == current_month:
+            elapsed_days = today.day
+        elif report_month < current_month:
+            elapsed_days = monthrange(year, month_number)[1]
+        else:
+            elapsed_days = 0
+        report['elapsed_days'] = elapsed_days
+        report['daily_average'] = round(report['total'] / elapsed_days) if elapsed_days else None
+
         previous_month = f'{year - 1:04d}-12' if month_number == 1 else f'{year:04d}-{month_number - 1:02d}'
         previous = reports.get(previous_month)
         previous_total = previous['total'] if previous else None

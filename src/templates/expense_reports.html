@@ -71,9 +71,11 @@
           {% else %}<dd class="insight-detail">前月の収支記録がないため比較できません。</dd>{% endif %}
         </div>
         <div>
-          <dt>支出1件あたりの平均</dt>
-          <dd>{{ '{:,}'.format(report.average) }} 円</dd>
-          <dd class="insight-detail">{% if report.count %}支出合計 ÷ {{ report.count }} 件（円単位に丸め）{% else %}支出の記録は0件です{% endif %}</dd>
+          <dt>1日あたりの平均支出</dt>
+          {% if report.elapsed_days %}
+          <dd>{{ '{:,}'.format(report.daily_average) }} 円</dd>
+          <dd class="insight-detail">支出合計 ÷ {{ report.elapsed_days }} 日（円単位に丸め）</dd>
+          {% else %}<dd class="insight-detail">月の開始後に表示します。</dd>{% endif %}
         </div>
       </dl>
     </article>

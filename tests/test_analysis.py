@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from datetime import date
 from pathlib import Path
 
 from src.analysis import monthly_expense_reports
@@ -34,7 +35,7 @@ class MonthlyExpenseReportsTest(unittest.TestCase):
         reports = monthly_expense_reports(self.db, 1)
         self.assertEqual([r['month'] for r in reports], ['2026-11', '2025-11'])
         report = reports[0]
-        self.assertEqual((report['total'], report['count'], report['average']), (1000, 3, 333))
+        self.assertEqual((report['total'], report['count']), (1000, 3))
         self.assertEqual([(c['key'], c['amount'], c['percentage']) for c in report['categories']],
                          [('food', 750, 75), ('transport', 250, 25)])
         self.assertEqual(report['top_categories'][0]['key'], 'food')
@@ -58,15 +59,17 @@ class MonthlyExpenseReportsTest(unittest.TestCase):
         self.assertEqual(monthly_expense_reports(self.db, 1), [])
         self.add('2026-09-01', 'food', 500)
         self.add('2026-10-01', 'salary', 100000, kind='income')
-        self.add('2026-11-01', 'food', 1000)
-        november, october, _ = monthly_expense_reports(self.db, 1)
-        self.assertEqual((october['total'], october['count'], october['average']), (0, 0, 0))
+        self.add('2026-11-01', 'food', 1900)
+        november, october, _ = monthly_expense_reports(self.db, 1, today=date(2026, 11, 19))
+        self.assertEqual((november['elapsed_days'], november['daily_average']), (19, 100))
+        self.assertEqual((october['total'], october['count'], october['daily_average']), (0, 0, 0))
+        self.assertEqual(october['elapsed_days'], 31)
         self.assertEqual(october['categories'], [])
         self.assertEqual(october['top_categories'], [])
         self.assertIsNone(october['gradient'])
         self.assertEqual((october['change'], october['change_percent']), (-500, 100))
         self.assertEqual(november['previous_total'], 0)
-        self.assertEqual(november['change'], 1000)
+        self.assertEqual(november['change'], 1900)
         self.assertIsNone(november['change_percent'])
 
     def test_legacy_single_category_and_very_small_share(self):
