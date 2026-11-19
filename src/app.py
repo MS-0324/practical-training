@@ -9,7 +9,6 @@ from .custom_categories import (archive_category, category_definitions, category
                                 category_labels, create_category, custom_categories,
                                 migrate_custom_categories)
 from .migration import migrate_categories
-from .receipts import migrate_receipts, register_receipts
 
 import click
 from flask import Flask, abort, current_app, flash, g, redirect, render_template, request, session, url_for
@@ -107,8 +106,6 @@ def create_app(test_config=None):
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
         SESSION_REFRESH_EACH_REQUEST=False,
         MAX_CONTENT_LENGTH=16384,
-        OPENAI_API_KEY=os.environ.get('OPENAI_API_KEY', ''),
-        OPENAI_RECEIPT_MODEL=os.environ.get('OPENAI_RECEIPT_MODEL', 'gpt-4.1-mini'),
     )
     if test_config:
         app.config.update(test_config)
@@ -117,19 +114,6 @@ def create_app(test_config=None):
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     migrate_categories(app.config['DATABASE'])
     migrate_custom_categories(app.config['DATABASE'])
-<<<<<<< HEAD
-    migrate_receipts(app.config['DATABASE'])
-
-    # Set limits before CSRFProtect parses multipart data. Other forms retain 16KB.
-    @app.before_request
-    def receipt_upload_limits():
-        if request.endpoint == 'receipts.scan':
-            request.max_content_length = 9 * 1024 * 1024
-        elif request.endpoint == 'receipts.review':
-            request.max_content_length = 256 * 1024
-
-=======
->>>>>>> 849e15a8137cda9bd9bd59063b804bbdd1f7fb57
     CSRFProtect(app)
     manager = LoginManager(app)
     manager.login_view = 'login'
@@ -435,5 +419,4 @@ def create_app(test_config=None):
             db.execute('DELETE FROM transactions WHERE id = ? AND user_id = ?', (transaction_id, current_user.id))
         return redirect(url_for('dashboard'))
 
-    register_receipts(app, get_db)
     return app

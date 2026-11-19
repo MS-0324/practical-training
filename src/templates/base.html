@@ -8,14 +8,12 @@
         }</style>
 <link rel="stylesheet" href="{{ url_for('static', filename='transactions.css') }}">
 <script src="{{ url_for('static', filename='transactions.js') }}" defer></script>
-{% block page_assets %}{% endblock %}
 </head>
 <body>
 <header><nav aria-label="メインナビゲーション">
 {% if current_user.is_authenticated %}
 <a href="{{ url_for('dashboard') }}">ダッシュボード</a>
 <a href="{{ url_for('spending_goal')}}">月間支出目標</a>
-<a href="{{ url_for('receipts.review') }}">レシート読み取り</a>
 <span>{{ current_user.username }}</span>
 <form method="post" action="{{ url_for('logout') }}">{{ action_form.hidden_tag() }}<button>ログアウト</button></form>
 {% else %}<a href="{{ url_for('login') }}">ログイン</a> <a href="{{ url_for('register') }}">ユーザー登録</a>{% endif %}
