@@ -1,0 +1,13 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {constants} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+const originalLink=fs.link;
+fs.link=async(a,b)=>{try{return await originalLink(a,b)}catch(e){if(e.code!=='EPERM')throw e;return fs.copyFile(a,b,constants.COPYFILE_EXCL)}};
+const root='C:/Program Files/WindowsApps/OpenAI.CodexPrimaryRuntime.v26-1112-737-0_26.1112.737.0_x64__3k8sg7r9htsxt/dependencies';
+process.env.RUNTIME_NODE_MODULES=root+'/node/node_modules';
+const skill='C:/Users/maeya/.codex/plugins/cache/openai-primary-runtime/presentations/26.1112.11217/skills/presentations';
+const {finalizePresentation}=await import(pathToFileURL(skill+'/container_tools/artifact_tool_utils.mjs').href);
+await fs.mkdir('output/revised',{recursive:true});
+const r=await finalizePresentation({workspaceDir:process.cwd(),candidatePath:path.resolve('redesign-portable.pptx'),finalPath:path.resolve('output/revised/家計簿Webアプリ_期末発表_完成版.pptx'),explicitTotalSlideCount:20,requiredNativeTableOwnerSlides:[4],requiredNativeChartOwnerSlides:[6,8],materializeLiteralChartWorkbooks:false,pythonExecutable:root+'/python/python.exe',integrityValidatorPath:skill+'/container_tools/inspect_presentation_package_integrity.py',layoutValidatorPath:skill+'/container_tools/inspect_presentation_layout_geometry.py',layoutArgs:['--expected-slide-size-emu','9144000,5143500','--validate-bullet-geometry','--validate-heading-fit','--require-native-table-slide','4'],fontPolicy:{basis:'design',families:['Meiryo','Arial']},verifyArtifactToolImport:true,receiptPath:path.resolve('validation-redesign.json')});
+console.log(JSON.stringify({finalPath:r.finalPath,sha256:r.finalSha256,layout:r.presentationLayout,chart:r.nativeChartValidation}));

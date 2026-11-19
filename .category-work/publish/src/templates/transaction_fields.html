@@ -1,0 +1,49 @@
+{{ form.hidden_tag() }}
+{# Keep Enter in ordinary transaction fields bound to saving the transaction. #}
+<button type="submit" name="submit" value="保存" hidden>保存</button>
+<div class="transaction-fields">
+<p>{{ form.kind.label }} {{ form.kind() }}</p>
+<fieldset><legend>カテゴリを選択</legend>
+<div class="category-grid">
+{% for key, kind, icon, label in categories %}
+<label class="category-option" data-kind="{{ kind }}">
+<input type="radio" name="category" value="{{ key }}" {% if form.category.data == key %}checked{% endif %} required>
+<span><span aria-hidden="true">{{ icon }}</span> {{ label }}</span>
+</label>
+{% endfor %}
+{% if form.allow_uncategorized|default(false) %}
+<label class="category-option"><input type="radio" name="category" value="uncategorized" {% if form.category.data == 'uncategorized' %}checked{% endif %}>未分類</label>
+{% endif %}
+</div>
+<details class="category-creator" data-category-creator {% if form.category_error|default('') %}open{% endif %}>
+<summary>＋ 自分のカテゴリを追加</summary>
+<p class="analysis-note">「その他」より詳しく分けたいときは、好きな名前を付けて保存できます。現在選択中の収入・支出のカテゴリになります。</p>
+<div class="category-create-controls">
+<label for="new-category-name">カテゴリ名</label>
+<input id="new-category-name" name="new_category_name" maxlength="30" placeholder="例：ライブ・推し活" value="{{ form.new_category_name|default('') }}" autocomplete="off">
+<button type="submit" name="category_action" value="create" formnovalidate>追加して選択</button>
+</div>
+</details>
+{% if custom_categories %}
+<details class="category-manager" {% if request.form.get('delete_category') %}open{% endif %}>
+<summary>作成したカテゴリを管理・削除</summary>
+<p class="analysis-note">削除すると次回からの選択肢から外れます。過去の収支とグラフには元の名前が残ります。</p>
+<ul>
+{% for category in custom_categories %}
+<li data-managed-kind="{{ category.kind }}">
+<span>🏷️ {{ category.name }} <small>（{{ '収入' if category.kind == 'income' else '支出' }}）</small></span>
+<button type="submit" name="delete_category" value="custom_{{ category.id }}" formnovalidate aria-label="カテゴリ「{{ category.name }}」を削除">削除</button>
+</li>
+{% endfor %}
+</ul>
+</details>
+{% endif %}
+<p data-category-status role="status" aria-live="polite" tabindex="-1">{{ form.category_status|default('') }}</p>
+{% if form.category_error|default('') %}<p role="alert">{{ form.category_error }}</p>{% endif %}
+</fieldset>
+<p>{{ form.amount.label }} {{ form.amount(min=1, max=1000000000, step=1, inputmode='numeric', required=true) }}</p>
+<p>{{ form.date.label }} {{ form.date(required=true) }}</p>
+<p>{{ form.description.label }} {{ form.description(maxlength=200) }}</p>
+{% for field in form %}{% for error in field.errors %}<p role="alert">{{ field.label.text }}：{{ error }}</p>{% endfor %}{% endfor %}
+{{ form.submit() }}
+</div>

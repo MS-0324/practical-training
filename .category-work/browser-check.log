@@ -1,0 +1,58 @@
+GET /login 200
+GET /static/transactions.css 200
+GET /static/transactions.js 200
+POST /login 302
+GET /dashboard 200
+GET /static/transactions.css 200
+GET /static/transactions.js 200
+POST /dashboard 200
+POST /dashboard 302
+・・蜿取髪繧定ｿｽ蜉
+
+遞ｮ蛻･ 
+蜿主・
+謾ｯ蜃ｺ
+
+繧ｫ繝・ざ繝ｪ繧帝∈謚・忽 鬟溯ｲｻ
+鎖・・螟夜｣・笘・繧ｫ繝輔ぉ
+將 譌･逕ｨ蜩・匠 螳ｶ雉・庁 豌ｴ驕灘・辭ｱ雋ｻ
+導 騾壻ｿ｡雋ｻ
+噬 莠､騾夊ｲｻ
+雌 蟄ｦ雋ｻ
+答 譖ｸ邀阪・謨呎攝
+笨擾ｸ・譁・袷蜈ｷ
+将 繧ｵ繝ｼ繧ｯ繝ｫ
+装 陦｣譛・笨ゑｸ・鄒主ｮｹ
+抽 蛹ｻ逋・式 雜｣蜻ｳ
+脂 莠､髫幄ｲｻ
+ｧｳ 譌・｡・汐 螳夐｡阪し繝ｼ繝薙せ
+笞ｽ 繧ｹ繝昴・繝・氏 雍医ｊ迚ｩ
+ｧｾ 縺昴・莉悶・謾ｯ蜃ｺ
+捷・・繝ｩ繧､繝夜□蠕・・・閾ｪ蛻・・繧ｫ繝・ざ繝ｪ繧定ｿｽ蜉
+菴懈・縺励◆繧ｫ繝・ざ繝ｪ繧堤ｮ｡逅・・蜑企勁
+
+縲後Λ繧､繝夜□蠕√阪ｒ驕ｸ謚槭＠縺ｾ縺励◆縲よｬ｡蝗槭°繧峨ｂ荳隕ｧ縺ｧ驕ｸ縺ｹ縺ｾ縺吶・
+驥鷹｡搾ｼ亥・・・
+
+譌･莉・
+
+繝｡繝｢・井ｻｻ諢擾ｼ・
+
+繧ｭ繝｣繝ｳ繧ｻ繝ｫ
+菫晏ｭ倡ｵ先棡繧堤｢ｺ隱阪〒縺阪∪縺帙ｓ縲ゆｸ隕ｧ繧堤｢ｺ隱阪＠縺ｦ縺九ｉ蜀榊ｺｦ謫堺ｽ懊＠縺ｦ縺上□縺輔＞縲ゅΟ繧ｰ繧､繝ｳ譛滄剞縺悟・繧後◆蝣ｴ蜷医・蜀阪Ο繧ｰ繧､繝ｳ縺励※縺上□縺輔＞縲・[]
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.waitFor: Timeout 5000ms exceeded.
+Call log:
+  - waiting for getByText('蜿取髪繧定ｿｽ蜉縺励∪縺励◆縲・, { exact: true }) to be visible
+
+    at C:\諠・ｱ繧ｷ繧ｹ繝・Β螳溽ｿ箪practical-training\.category-work\browser-check.mjs:37:55 {
+  log: [
+    "  - waiting for getByText('蜿取髪繧定ｿｽ蜉縺励∪縺励◆縲・, { exact: true }) to be visible"
+  ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.1

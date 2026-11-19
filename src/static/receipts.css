@@ -1,0 +1,32 @@
+.receipt-card { margin: 1.5rem 0; padding: 1.5rem; border: 1px solid #334155; border-radius: 1rem; background: #131f32; }
+.receipt-card h2 { margin-top: 0; font-size: 1.2rem; }
+.receipt-source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; }
+.receipt-upload { display: grid; gap: .4rem; }
+.receipt-card input, .receipt-card select { box-sizing: border-box; max-width: 100%; }
+.receipt-card input[type=file] { width: 100%; }
+.receipt-card button:disabled { opacity: .5; cursor: default; }
+.receipt-notice { background: #1b2d45; border-left: 3px solid #93c5fd; padding: .8rem 1rem; line-height: 1.7; overflow-wrap: anywhere; }
+#receipt-video { display: block; width: 100%; max-width: 560px; max-height: 450px; margin: 1rem auto; background: #0b1120; }
+#receipt-preview-wrap { margin: 1rem 0; text-align: center; }
+#receipt-preview { max-width: 100%; max-height: 440px; object-fit: contain; border-radius: .5rem; }
+#receipt-filename { margin-top: .5rem; color: #b6c5d9; overflow-wrap: anywhere; }
+.receipt-table { table-layout: fixed; margin: 1rem 0; }
+.receipt-table th:first-child { width: 60%; }
+.receipt-table td { vertical-align: top; }
+.receipt-table select, .receipt-table input[name=description] { width: 100%; }
+.receipt-table input[name=description] { margin-top: .5rem; }
+.receipt-amount { display: flex; align-items: center; gap: .35rem; }
+.receipt-amount input { width: 100%; min-width: 0; }
+.receipt-remove { margin-top: .5rem; font-size: .8rem; background: transparent; color: #fda4af; border-color: #64748b; }
+.receipt-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; margin: 1.5rem 0 .5rem; font-variant-numeric: tabular-nums; }
+.receipt-summary strong { font-size: 1.3rem; }
+.receipt-confirm { display: flex; align-items: start; gap: .5rem; margin: 1.25rem 0; line-height: 1.6; }
+#receipt-save { background: #93c5fd; font-weight: bold; padding: .8rem 1.2rem; }
+.receipt-warning { color: #fde68a; }
+#receipt-status { line-height: 1.7; }
+@media (max-width: 600px) {
+  .receipt-card { padding: 1rem; }
+  .receipt-table th:first-child { width: 55%; }
+  .receipt-table select, .receipt-table input { font-size: 1rem; padding: .45rem; }
+  #receipt-save { width: 100%; }
+}

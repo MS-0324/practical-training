@@ -13,6 +13,20 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS transactions_owner_date ON transactions(user_id, date);
+CREATE TABLE IF NOT EXISTS custom_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL CHECK(kind IN ('income', 'expense')),
+    name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 30),
+    normalized_name TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+    UNIQUE(user_id, kind, normalized_name)
+);
+CREATE TABLE IF NOT EXISTS receipt_imports (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS monthly_spending_goals (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),

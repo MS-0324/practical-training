@@ -98,3 +98,70 @@ PCではグラフと内訳表を左右に、スマホでは上下に配置しま
 `src/app.py` が結果を `src/templates/expense_reports.html` に渡します。
 円グラフは集計値に基づくCSSの `conic-gradient` で描画するため、外部CDNやJavaScriptには依存しません。
 `tests/test_analysis.py` と `tests/test_app.py` で集計、ユーザー分離、年越しの前月比、空データ、保存後の更新を検証します。
+
+## 自分のカテゴリを追加・削除する
+
+収支の入力欄で「その他」を選ぶか、「＋ 自分のカテゴリを追加」を開きます。
+名前を1〜30文字で入力して「追加して選択」を押すと、既存のカテゴリと同じ一覧に追加され、選択状態になります。
+収入用・支出用を分けてログインユーザーごとに保存するため、次回のログイン後や別端末からも選べます。
+カテゴリの追加だけでは収支は保存しません。入力途中の金額・日付・メモは維持されます。
+
+「作成したカテゴリを管理・削除」から自分のカテゴリを削除できます。
+削除後は新しい収支の選択肢から外れますが、過去の収支・カテゴリ名・円グラフの集計は残ります。
+過去の収支を更新するときも、その収支に付いていたカテゴリは維持できます。
+同じ種類・同じ名前で再追加すると以前のカテゴリを復元します。標準カテゴリは削除できません。
+追加カテゴリは収支一覧と月別分析にも反映されます。
+
+既存DBには起動時に `custom_categories` テーブルを追加します。既存の収支の書き換えやDB初期化のやり直しは不要です。
+PythonAnywhereへ反映する場合は、このブランチを取り込んでWebアプリをReloadしてください。
+
+実装：`src/custom_categories.py`、`src/custom_categories.sql`、`src/app.py`、`src/analysis.py`、
+`src/templates/transaction_fields.html`、`src/static/transactions.js`、`src/static/transactions.css`。
+`tests/test_custom_categories.py` で作成・保存・削除、ユーザー分離、履歴保持、入力検証、既存DBの移行を検証します。
+
+## レシート読み取り
+
+上部の「レシート読み取り」から、カメラ撮影または画像ファイルの選択ができます。
+画像を確認して「画像を読み取る」を押すと、OpenAI Responses APIで商品名・金額・購入日・支払合計を抽出し、既存の支出カテゴリに分類します。
+この時点では収支を保存しません。
+
+確認表は「カテゴリ・商品名」「金額」の2列です。カテゴリ・商品名・金額と購入日を修正でき、行の追加・削除もできます。
+登録合計と読み取った支払合計の差を表示します。税・値引きは自動配分しないため、画像と照合して金額を修正してください。
+内容確認のチェックを入れて「確定して支出を登録」を押すと、全明細をログインユーザーの支出としてまとめて保存し、月別グラフにも反映します。
+商品名は収支のメモになります。画像の読み間違いや分類ミスは起こり得るため、必ず確認してください。
+
+### APIの設定（サーバーを起動するPowerShell）
+
+ChatGPTの契約とAPIの課金は別です。OpenAIのAPIキーと利用枠を用意してください。
+APIキーはブラウザやソースコードに入れず、サーバーの環境変数で設定します。
+
+```powershell
+python -m pip install -r requirements.txt
+$receiptApiKey = Read-Host 'OpenAI APIキーを入力' -AsSecureString
+$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new('', $receiptApiKey).Password
+Remove-Variable receiptApiKey
+$env:OPENAI_RECEIPT_MODEL = 'gpt-4.1-mini'
+python -m flask --app src.app:create_app run --debug
+```
+
+既存の `SECRET_KEY` 設定はそのまま使います。新しいPowerShellでは先述の手順で設定してください。
+`OPENAI_RECEIPT_MODEL` は省略可能です（既定値は `gpt-4.1-mini`）。画像入力とStructured Outputsに対応したモデルを指定してください。
+キー未設定時は画像読み取りボタンが使えず、設定が必要な旨を表示します。確認表への手入力は利用できます。
+読み取りのたびにAPI使用量が発生し、料金はサーバー側のAPIキーの所有者に請求されます。
+
+### 対応範囲・データの扱い
+
+- 日本円のレシート、1〜100明細。金額は1〜1,000,000,000円の整数です。
+- JPEG・PNG・WebPの静止画、8MB以下・2,500万画素以下に対応。PDF・HEIC・アニメーション画像は対象外です。
+- カメラはブラウザの許可が必要です。HTTPSまたはlocalhostで利用できます。別PCやスマホから `http://192.168...` で開いた場合、カメラが使えないことがあります。その場合は撮影済みの画像をアップロードしてください。
+- 撮影完了・カメラを閉じる操作・ページ移動・バックグラウンド移行でカメラを停止します。
+- 画像は「画像を読み取る」を押したときにOpenAIへ送信します。アプリは画像を永続保存せず、送信前に画像を再生成してEXIF情報を取り除きます。APIの `store` は `false` に設定しますが、OpenAI側のデータ取り扱いは同サービスのポリシーに従います。
+- 認証・CSRF・画像形式とサイズ・API応答・登録内容をサーバー側でも検証します。APIエラーや読み取りだけでは収支は追加されません。
+- 保存はトランザクション単位です。同じ確認画面からの再送信は重複登録しません。別の確認画面で同じ画像を改めて読み取った場合は別の登録として扱います。
+- 既存DBには起動時に `receipt_imports` テーブルだけを追加します。既存の収支は変更しません。`init-db`のやり直しは不要です。
+
+実装：`src/receipt_ocr.py`（画像処理・API呼び出し）、`src/receipts.py`（確認画面・一括保存）、
+`src/templates/receipts.html`、`src/static/receipts.js`、`src/static/receipts.css`（撮影と編集画面）。
+テストではAPI通信を模擬し、料金を発生させずに抽出・修正・一括保存・重複防止・エラーを検証します。
+
+公式資料：[画像入力](https://developers.openai.com/api/docs/guides/images-vision)、[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)、[ChatGPTとAPIの課金](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform)。

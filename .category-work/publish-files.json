@@ -1,0 +1,1 @@
+["src/app.py", "src/schema.sql", "src/analysis.py", "src/static/transactions.js", "src/static/transactions.css", "src/templates/transaction_fields.html", "README.md", "src/custom_categories.py", "src/custom_categories.sql", "tests/test_custom_categories.py"]

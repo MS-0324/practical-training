@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post">
+{{ form.hidden_tag() }}
+{% for field in form if field.type not in ['CSRFTokenField', 'SubmitField'] %}
+<p>{{ field.label }} {{ field() }}</p>
+{% for error in field.errors %}<p role="alert">{{ error }}</p>{% endfor %}
+{% endfor %}
+{{ form.submit() }}
+</form>
+{% endblock %}

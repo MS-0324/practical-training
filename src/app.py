@@ -5,7 +5,11 @@ from pathlib import Path
 
 from .analysis import monthly_expense_reports
 from .categories import CATEGORIES, CATEGORY_LABELS
+from .custom_categories import (archive_category, category_definitions, category_key,
+                                category_labels, create_category, custom_categories,
+                                migrate_custom_categories)
 from .migration import migrate_categories
+from .receipts import migrate_receipts, register_receipts
 
 import click
 from flask import Flask, abort, current_app, flash, g, redirect, render_template, request, session, url_for
@@ -52,10 +56,16 @@ class TransactionForm(FlaskForm):
     category = SelectField('カテゴリ', choices=[(key, icon + ' ' + label) for key, kind, icon, label in CATEGORIES], validators=[DataRequired()])
     description = StringField('メモ（任意）', validators=[Length(max=200)])
 
+    def __init__(self, *args, category_definitions=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.category_definitions = list(category_definitions if category_definitions is not None else CATEGORIES)
+        self.category.choices = [(key, icon + ' ' + label)
+                                 for key, _, icon, label in self.category_definitions]
+
     def validate_category(self, field):#選択したカテゴリと収入・支出の組み合わせを確認する。「支出なのに給料を選んでいる」といった入力を拒否する役割。カテゴリ一覧は別ファイルの categories.py から取得している。
         if field.data == 'uncategorized' and getattr(self, 'allow_uncategorized', False):
             return
-        if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in CATEGORIES):
+        if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in self.category_definitions):
             raise ValidationError('種別に合うカテゴリを選択してください。')
 
     date = DateField('日付', validators=[DataRequired()])
@@ -97,6 +107,8 @@ def create_app(test_config=None):
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
         SESSION_REFRESH_EACH_REQUEST=False,
         MAX_CONTENT_LENGTH=16384,
+        OPENAI_API_KEY=os.environ.get('OPENAI_API_KEY', ''),
+        OPENAI_RECEIPT_MODEL=os.environ.get('OPENAI_RECEIPT_MODEL', 'gpt-4.1-mini'),
     )
     if test_config:
         app.config.update(test_config)
@@ -104,6 +116,17 @@ def create_app(test_config=None):
         raise RuntimeError('SECRET_KEY環境変数を設定してください。')
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     migrate_categories(app.config['DATABASE'])
+    migrate_custom_categories(app.config['DATABASE'])
+    migrate_receipts(app.config['DATABASE'])
+
+    # Set limits before CSRFProtect parses multipart data. Other forms retain 16KB.
+    @app.before_request
+    def receipt_upload_limits():
+        if request.endpoint == 'receipts.scan':
+            request.max_content_length = 9 * 1024 * 1024
+        elif request.endpoint == 'receipts.review':
+            request.max_content_length = 256 * 1024
+
     CSRFProtect(app)
     manager = LoginManager(app)
     manager.login_view = 'login'
@@ -127,11 +150,63 @@ def create_app(test_config=None):
         with app.open_resource('schema.sql') as schema:
             get_db().executescript(schema.read().decode('utf-8'))
         migrate_categories(app.config['DATABASE'])
+        migrate_custom_categories(app.config['DATABASE'])
         click.echo('データベースを初期化しました（既存データは保持）。')
 
     @app.context_processor
     def action_form():
-        return {'action_form': ActionForm(), 'categories': CATEGORIES, 'category_labels': CATEGORY_LABELS}
+        if current_user.is_authenticated:
+            db = get_db()
+            return {'action_form': ActionForm(),
+                    'categories': category_definitions(db, current_user.id),
+                    'category_labels': category_labels(db, current_user.id),
+                    'custom_categories': custom_categories(db, current_user.id)}
+        return {'action_form': ActionForm(), 'categories': CATEGORIES,
+                'category_labels': CATEGORY_LABELS, 'custom_categories': []}
+
+    def transaction_form(row=None):
+        definitions = category_definitions(get_db(), current_user.id)
+        # An archived category can stay on its existing record, but cannot be
+        # assigned to a new record (or to another record being edited).
+        if row and row['category'].startswith('custom_'):
+            for definition in category_definitions(get_db(), current_user.id, include_archived=True):
+                if definition[0] == row['category'] and definition not in definitions:
+                    definitions.append(definition)
+        form = TransactionForm(category_definitions=definitions)
+        form.allow_uncategorized = bool(row and row['category'] == 'uncategorized')
+        if form.allow_uncategorized:
+            form.category.choices.append(('uncategorized', '未分類'))
+        return form
+
+    def category_action(form, row=None):
+        if request.method != 'POST' or not (request.form.get('category_action') or request.form.get('delete_category')):
+            return form, False
+        status = ''
+        error = ''
+        selected = form.category.data
+        try:
+            if request.form.get('delete_category'):
+                key = request.form['delete_category']
+                if not archive_category(get_db(), current_user.id, key):
+                    abort(404)
+                if selected == key and (row is None or row['category'] != key):
+                    selected = None
+                status = 'カテゴリを削除しました。過去の収支と集計はそのまま残ります。'
+            elif request.form.get('category_action') == 'create':
+                created = create_category(get_db(), current_user.id, form.kind.data,
+                                          request.form.get('new_category_name', ''))
+                selected = category_key(created['id'])
+                status = f'「{created["name"]}」を選択しました。次回からも一覧で選べます。'
+            else:
+                abort(400)
+        except ValueError as exc:
+            error = str(exc)
+        form = transaction_form(row)
+        form.category.data = selected
+        form.category_status = status
+        form.category_error = error
+        form.new_category_name = request.form.get('new_category_name', '') if error else ''
+        return form, True
 
     @app.after_request
     def private_response(response):
@@ -184,11 +259,12 @@ def create_app(test_config=None):
     @app.route('/dashboard', methods=['GET', 'POST'])
     @login_required
     def dashboard():
-        form = TransactionForm()
+        form = transaction_form()
         if request.method == 'GET':
             form.kind.data = 'expense'
             form.date.data = date.today()
-        if form.validate_on_submit():
+        form, category_changed = category_action(form)
+        if not category_changed and form.validate_on_submit():
             save_transaction(form)
             return redirect(url_for('dashboard', month=request.args.get('month')))
         db = get_db()
@@ -319,7 +395,7 @@ def create_app(test_config=None):
         with db:
             db.execute('INSERT INTO transactions (user_id, kind, amount, description, date, category) VALUES (?, ?, ?, ?, ?, ?)',
                        (current_user.id, form.kind.data, form.amount.data,
-                        form.description.data or CATEGORY_LABELS[form.category.data],
+                        form.description.data or category_labels(db, current_user.id)[form.category.data],
                         form.date.data.isoformat(), form.category.data))
 
     @app.route('/transactions/new', methods=['GET', 'POST'])
@@ -333,21 +409,19 @@ def create_app(test_config=None):
     @login_required
     def transaction_edit(transaction_id):
         row = owned_transaction(transaction_id)
-        form = TransactionForm()
-        form.allow_uncategorized = row['category'] == 'uncategorized'
-        if form.allow_uncategorized:
-            form.category.choices.append(('uncategorized', '未分類'))
+        form = transaction_form(row)
         if request.method == 'GET':
             form.kind.data, form.amount.data, form.description.data = row['kind'], row['amount'], row['description']
             form.date.data = date.fromisoformat(row['date'])
             form.category.data = row['category']
-        if form.validate_on_submit():
+        form, category_changed = category_action(form, row)
+        if not category_changed and form.validate_on_submit():
             db = get_db()
             with db:
                 db.execute('UPDATE transactions SET kind = ?, amount = ?, description = ?, date = ?, category = ? WHERE id = ? AND user_id = ?',
-                           (form.kind.data, form.amount.data, form.description.data or CATEGORY_LABELS[form.category.data], form.date.data.isoformat(), form.category.data, transaction_id, current_user.id))
+                           (form.kind.data, form.amount.data, form.description.data or category_labels(db, current_user.id)[form.category.data], form.date.data.isoformat(), form.category.data, transaction_id, current_user.id))
             return redirect(url_for('dashboard'))
-        return render_template('transaction_edit.html', title='収支更新', form=form)
+        return render_template('transaction_edit.html', title='収支更新', form=form, categories=form.category_definitions)
 
     @app.post('/transactions/<int:transaction_id>/delete')
     @login_required
@@ -358,4 +432,5 @@ def create_app(test_config=None):
             db.execute('DELETE FROM transactions WHERE id = ? AND user_id = ?', (transaction_id, current_user.id))
         return redirect(url_for('dashboard'))
 
+    register_receipts(app, get_db)
     return app

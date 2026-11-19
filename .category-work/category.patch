@@ -1,0 +1,600 @@
+--- a/src/app.py
++++ b/src/app.py
+@@ -5,6 +5,9 @@
+ 
+ from .analysis import monthly_expense_reports
+ from .categories import CATEGORIES, CATEGORY_LABELS
++from .custom_categories import (archive_category, category_definitions, category_key,
++                                category_labels, create_category, custom_categories,
++                                migrate_custom_categories)
+ from .migration import migrate_categories
+ from .receipts import migrate_receipts, register_receipts
+ 
+@@ -53,10 +56,16 @@
+     category = SelectField('カテゴリ', choices=[(key, icon + ' ' + label) for key, kind, icon, label in CATEGORIES], validators=[DataRequired()])
+     description = StringField('メモ（任意）', validators=[Length(max=200)])
+ 
++    def __init__(self, *args, category_definitions=None, **kwargs):
++        super().__init__(*args, **kwargs)
++        self.category_definitions = list(category_definitions if category_definitions is not None else CATEGORIES)
++        self.category.choices = [(key, icon + ' ' + label)
++                                 for key, _, icon, label in self.category_definitions]
++
+     def validate_category(self, field):#選択したカテゴリと収入・支出の組み合わせを確認する。「支出なのに給料を選んでいる」といった入力を拒否する役割。カテゴリ一覧は別ファイルの categories.py から取得している。
+         if field.data == 'uncategorized' and getattr(self, 'allow_uncategorized', False):
+             return
+-        if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in CATEGORIES):
++        if not any(key == field.data and kind == self.kind.data for key, kind, icon, label in self.category_definitions):
+             raise ValidationError('種別に合うカテゴリを選択してください。')
+ 
+     date = DateField('日付', validators=[DataRequired()])
+@@ -107,6 +116,7 @@
+         raise RuntimeError('SECRET_KEY環境変数を設定してください。')
+     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+     migrate_categories(app.config['DATABASE'])
++    migrate_custom_categories(app.config['DATABASE'])
+     migrate_receipts(app.config['DATABASE'])
+ 
+     # Set limits before CSRFProtect parses multipart data. Other forms retain 16KB.
+@@ -140,11 +150,63 @@
+         with app.open_resource('schema.sql') as schema:
+             get_db().executescript(schema.read().decode('utf-8'))
+         migrate_categories(app.config['DATABASE'])
++        migrate_custom_categories(app.config['DATABASE'])
+         click.echo('データベースを初期化しました（既存データは保持）。')
+ 
+     @app.context_processor
+     def action_form():
+-        return {'action_form': ActionForm(), 'categories': CATEGORIES, 'category_labels': CATEGORY_LABELS}
++        if current_user.is_authenticated:
++            db = get_db()
++            return {'action_form': ActionForm(),
++                    'categories': category_definitions(db, current_user.id),
++                    'category_labels': category_labels(db, current_user.id),
++                    'custom_categories': custom_categories(db, current_user.id)}
++        return {'action_form': ActionForm(), 'categories': CATEGORIES,
++                'category_labels': CATEGORY_LABELS, 'custom_categories': []}
++
++    def transaction_form(row=None):
++        definitions = category_definitions(get_db(), current_user.id)
++        # An archived category can stay on its existing record, but cannot be
++        # assigned to a new record (or to another record being edited).
++        if row and row['category'].startswith('custom_'):
++            for definition in category_definitions(get_db(), current_user.id, include_archived=True):
++                if definition[0] == row['category'] and definition not in definitions:
++                    definitions.append(definition)
++        form = TransactionForm(category_definitions=definitions)
++        form.allow_uncategorized = bool(row and row['category'] == 'uncategorized')
++        if form.allow_uncategorized:
++            form.category.choices.append(('uncategorized', '未分類'))
++        return form
++
++    def category_action(form, row=None):
++        if request.method != 'POST' or not (request.form.get('category_action') or request.form.get('delete_category')):
++            return form, False
++        status = ''
++        error = ''
++        selected = form.category.data
++        try:
++            if request.form.get('delete_category'):
++                key = request.form['delete_category']
++                if not archive_category(get_db(), current_user.id, key):
++                    abort(404)
++                if selected == key and (row is None or row['category'] != key):
++                    selected = None
++                status = 'カテゴリを削除しました。過去の収支と集計はそのまま残ります。'
++            elif request.form.get('category_action') == 'create':
++                created = create_category(get_db(), current_user.id, form.kind.data,
++                                          request.form.get('new_category_name', ''))
++                selected = category_key(created['id'])
++                status = f'「{created["name"]}」を選択しました。次回からも一覧で選べます。'
++            else:
++                abort(400)
++        except ValueError as exc:
++            error = str(exc)
++        form = transaction_form(row)
++        form.category.data = selected
++        form.category_status = status
++        form.category_error = error
++        form.new_category_name = request.form.get('new_category_name', '') if error else ''
++        return form, True
+ 
+     @app.after_request
+     def private_response(response):
+@@ -197,11 +259,12 @@
+     @app.route('/dashboard', methods=['GET', 'POST'])
+     @login_required
+     def dashboard():
+-        form = TransactionForm()
++        form = transaction_form()
+         if request.method == 'GET':
+             form.kind.data = 'expense'
+             form.date.data = date.today()
+-        if form.validate_on_submit():
++        form, category_changed = category_action(form)
++        if not category_changed and form.validate_on_submit():
+             save_transaction(form)
+             return redirect(url_for('dashboard', month=request.args.get('month')))
+         db = get_db()
+@@ -332,7 +395,7 @@
+         with db:
+             db.execute('INSERT INTO transactions (user_id, kind, amount, description, date, category) VALUES (?, ?, ?, ?, ?, ?)',
+                        (current_user.id, form.kind.data, form.amount.data,
+-                        form.description.data or CATEGORY_LABELS[form.category.data],
++                        form.description.data or category_labels(db, current_user.id)[form.category.data],
+                         form.date.data.isoformat(), form.category.data))
+ 
+     @app.route('/transactions/new', methods=['GET', 'POST'])
+@@ -346,21 +409,19 @@
+     @login_required
+     def transaction_edit(transaction_id):
+         row = owned_transaction(transaction_id)
+-        form = TransactionForm()
+-        form.allow_uncategorized = row['category'] == 'uncategorized'
+-        if form.allow_uncategorized:
+-            form.category.choices.append(('uncategorized', '未分類'))
++        form = transaction_form(row)
+         if request.method == 'GET':
+             form.kind.data, form.amount.data, form.description.data = row['kind'], row['amount'], row['description']
+             form.date.data = date.fromisoformat(row['date'])
+             form.category.data = row['category']
+-        if form.validate_on_submit():
++        form, category_changed = category_action(form, row)
++        if not category_changed and form.validate_on_submit():
+             db = get_db()
+             with db:
+                 db.execute('UPDATE transactions SET kind = ?, amount = ?, description = ?, date = ?, category = ? WHERE id = ? AND user_id = ?',
+-                           (form.kind.data, form.amount.data, form.description.data or CATEGORY_LABELS[form.category.data], form.date.data.isoformat(), form.category.data, transaction_id, current_user.id))
++                           (form.kind.data, form.amount.data, form.description.data or category_labels(db, current_user.id)[form.category.data], form.date.data.isoformat(), form.category.data, transaction_id, current_user.id))
+             return redirect(url_for('dashboard'))
+-        return render_template('transaction_edit.html', title='収支更新', form=form)
++        return render_template('transaction_edit.html', title='収支更新', form=form, categories=form.category_definitions)
+ 
+     @app.post('/transactions/<int:transaction_id>/delete')
+     @login_required
+--- a/src/schema.sql
++++ b/src/schema.sql
+@@ -13,6 +13,15 @@
+     date TEXT NOT NULL
+ );
+ CREATE INDEX IF NOT EXISTS transactions_owner_date ON transactions(user_id, date);
++CREATE TABLE IF NOT EXISTS custom_categories (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    user_id INTEGER NOT NULL REFERENCES users(id),
++    kind TEXT NOT NULL CHECK(kind IN ('income', 'expense')),
++    name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 30),
++    normalized_name TEXT NOT NULL,
++    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
++    UNIQUE(user_id, kind, normalized_name)
++);
+ CREATE TABLE IF NOT EXISTS receipt_imports (
+     token TEXT PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id),
+--- a/src/analysis.py
++++ b/src/analysis.py
+@@ -1,6 +1,7 @@
+ """Monthly expense reports built from the signed-in user's records."""
+ 
+-from .categories import CATEGORIES, CATEGORY_LABELS
++from .categories import CATEGORIES
++from .custom_categories import category_labels, custom_category_color
+ 
+ 
+ # A category keeps the same color even when its rank changes between months.
+@@ -19,6 +20,7 @@
+     Income creates a month entry but is excluded from expense totals and pies.
+     Comparisons always refer to the preceding calendar month, even across years.
+     """
++    labels = category_labels(db, user_id)
+     rows = db.execute(
+         '''SELECT substr(date, 1, 7) AS month, kind, category,
+                   SUM(amount) AS amount, COUNT(*) AS count
+@@ -43,9 +45,9 @@
+         report['count'] += row['count']
+         report['categories'].append({
+             'key': row['category'],
+-            'label': CATEGORY_LABELS.get(row['category'], '未分類'),
++            'label': labels.get(row['category'], '未分類'),
+             'amount': row['amount'],
+-            'color': EXPENSE_COLORS.get(row['category'], '#94a3b8'),
++            'color': EXPENSE_COLORS.get(row['category'], custom_category_color(row['category'])),
+         })
+ 
+     for month, report in reports.items():
+--- a/src/static/transactions.js
++++ b/src/static/transactions.js
+@@ -12,6 +12,49 @@
+     }
+     kind.addEventListener('change', () => updateCategories(true));
+     updateCategories(false);
++    form.addEventListener('keydown', event => {
++      if (event.key === 'Enter' && event.target.name === 'new_category_name') {
++        event.preventDefault();
++        form.requestSubmit(form.querySelector('[name="category_action"]'));
++      }
++    });
++    form.addEventListener('change', event => {
++      if (event.target.name === 'category' && ['other_expense', 'other_income'].includes(event.target.value)) {
++        const creator = form.querySelector('[data-category-creator]');
++        if (creator) creator.open = true;
++      }
++    });
++    // Category actions share the transaction form, so partially entered values
++    // survive both AJAX updates and ordinary HTML form submissions.
++    form.addEventListener('submit', async event => {
++      const button = event.submitter;
++      if (!button || !['category_action', 'delete_category'].includes(button.name)) return;
++      event.preventDefault();
++      if (form.dataset.categoryBusy === 'true' || form.querySelector('[type="submit"][name="submit"]').disabled) return;
++      if (button.name === 'delete_category' && !window.confirm('このカテゴリを選択肢から削除しますか？ 過去の収支と集計は残ります。')) return;
++      const data = new FormData(form);
++      data.append(button.name, button.value);
++      form.dataset.categoryBusy = 'true';
++      button.disabled = true;
++      const status = form.querySelector('[data-category-status]');
++      status.textContent = 'カテゴリを保存しています…';
++      try {
++        const response = await fetch(form.action, {method: 'POST', body: data});
++        const page = new DOMParser().parseFromString(await response.text(), 'text/html');
++        const main = page.querySelector('main');
++        if (!response.ok || !main?.querySelector('[data-transaction-form]')) throw new Error('category save failed');
++        document.querySelector('main').replaceWith(main);
++        setupTransactionForms();
++        const nextForm = document.querySelector('[data-transaction-form]');
++        const nextStatus = nextForm.querySelector('[data-category-status]');
++        const error = nextForm.querySelector('[role="alert"]');
++        (error ? nextForm.querySelector('[name="new_category_name"]') : nextForm.querySelector('[name="category"]:checked') || nextStatus).focus();
++      } catch (error) {
++        status.textContent = 'カテゴリの保存結果を確認できません。画面を再読み込みして確認してください。';
++        form.dataset.categoryBusy = 'false';
++        button.disabled = false;
++      }
++    });
+   });
+   const panel = document.getElementById('add-panel');
+   if (!panel) return;
+@@ -28,8 +71,10 @@
+   });
+   const form = panel.querySelector('form');
+   form.addEventListener('submit', async event => {
++    if (event.defaultPrevented) return;
+     event.preventDefault();
+-    const submit = form.querySelector('[type="submit"]');
++    if (form.dataset?.categoryBusy === 'true') return;
++    const submit = form.querySelector('[type="submit"][name="submit"]');
+     if (submit.disabled) return;
+     const data = new FormData(form);
+     submit.disabled = true;
+--- a/src/static/transactions.css
++++ b/src/static/transactions.css
+@@ -13,6 +13,16 @@
+ .category-option { display: flex; align-items: center; gap: .3rem; padding: .65rem; border: 1px solid #64748b; border-radius: .5rem; cursor: pointer; }
+ .category-option:has(input:checked) { background: #1e40af; border-color: #93c5fd; }
+ .category-option[hidden] { display: none; }
++.category-option { min-width: 0; overflow-wrap: anywhere; }
++.category-creator, .category-manager { margin-top: 1rem; }
++.category-create-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
++.category-create-controls input { max-width: 100%; box-sizing: border-box; }
++.category-manager ul { padding: 0; list-style: none; }
++.category-manager li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid #334155; }
++.category-manager li > span { overflow-wrap: anywhere; min-width: 0; }
++.category-manager small { color: #b6c5d9; }
++.category-manager button { flex-shrink: 0; }
++[data-category-status]:empty { display: none; }
+ :focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+ fieldset { border: 1px solid #64748b; border-radius: .5rem; }
+ table { width: 100%; border-collapse: collapse; }
+--- a/src/templates/transaction_fields.html
++++ b/src/templates/transaction_fields.html
+@@ -1,4 +1,6 @@
+ {{ form.hidden_tag() }}
++{# Keep Enter in ordinary transaction fields bound to saving the transaction. #}
++<button type="submit" name="submit" value="保存" hidden>保存</button>
+ <div class="transaction-fields">
+ <p>{{ form.kind.label }} {{ form.kind() }}</p>
+ <fieldset><legend>カテゴリを選択</legend>
+@@ -12,7 +14,33 @@
+ {% if form.allow_uncategorized|default(false) %}
+ <label class="category-option"><input type="radio" name="category" value="uncategorized" {% if form.category.data == 'uncategorized' %}checked{% endif %}>未分類</label>
+ {% endif %}
+-</div></fieldset>
++</div>
++<details class="category-creator" data-category-creator {% if form.category_error|default('') %}open{% endif %}>
++<summary>＋ 自分のカテゴリを追加</summary>
++<p class="analysis-note">「その他」より詳しく分けたいときは、好きな名前を付けて保存できます。現在選択中の収入・支出のカテゴリになります。</p>
++<div class="category-create-controls">
++<label for="new-category-name">カテゴリ名</label>
++<input id="new-category-name" name="new_category_name" maxlength="30" placeholder="例：ライブ・推し活" value="{{ form.new_category_name|default('') }}" autocomplete="off">
++<button type="submit" name="category_action" value="create" formnovalidate>追加して選択</button>
++</div>
++</details>
++{% if custom_categories %}
++<details class="category-manager" {% if request.form.get('delete_category') %}open{% endif %}>
++<summary>作成したカテゴリを管理・削除</summary>
++<p class="analysis-note">削除すると次回からの選択肢から外れます。過去の収支とグラフには元の名前が残ります。</p>
++<ul>
++{% for category in custom_categories %}
++<li data-managed-kind="{{ category.kind }}">
++<span>🏷️ {{ category.name }} <small>（{{ '収入' if category.kind == 'income' else '支出' }}）</small></span>
++<button type="submit" name="delete_category" value="custom_{{ category.id }}" formnovalidate aria-label="カテゴリ「{{ category.name }}」を削除">削除</button>
++</li>
++{% endfor %}
++</ul>
++</details>
++{% endif %}
++<p data-category-status role="status" aria-live="polite" tabindex="-1">{{ form.category_status|default('') }}</p>
++{% if form.category_error|default('') %}<p role="alert">{{ form.category_error }}</p>{% endif %}
++</fieldset>
+ <p>{{ form.amount.label }} {{ form.amount(min=1, max=1000000000, step=1, inputmode='numeric', required=true) }}</p>
+ <p>{{ form.date.label }} {{ form.date(required=true) }}</p>
+ <p>{{ form.description.label }} {{ form.description(maxlength=200) }}</p>
+--- a/README.md
++++ b/README.md
+@@ -99,6 +99,26 @@
+ 円グラフは集計値に基づくCSSの `conic-gradient` で描画するため、外部CDNやJavaScriptには依存しません。
+ `tests/test_analysis.py` と `tests/test_app.py` で集計、ユーザー分離、年越しの前月比、空データ、保存後の更新を検証します。
+ 
++## 自分のカテゴリを追加・削除する
++
++収支の入力欄で「その他」を選ぶか、「＋ 自分のカテゴリを追加」を開きます。
++名前を1〜30文字で入力して「追加して選択」を押すと、既存のカテゴリと同じ一覧に追加され、選択状態になります。
++収入用・支出用を分けてログインユーザーごとに保存するため、次回のログイン後や別端末からも選べます。
++カテゴリの追加だけでは収支は保存しません。入力途中の金額・日付・メモは維持されます。
++
++「作成したカテゴリを管理・削除」から自分のカテゴリを削除できます。
++削除後は新しい収支の選択肢から外れますが、過去の収支・カテゴリ名・円グラフの集計は残ります。
++過去の収支を更新するときも、その収支に付いていたカテゴリは維持できます。
++同じ種類・同じ名前で再追加すると以前のカテゴリを復元します。標準カテゴリは削除できません。
++追加カテゴリは収支一覧と月別分析にも反映されます。
++
++既存DBには起動時に `custom_categories` テーブルを追加します。既存の収支の書き換えやDB初期化のやり直しは不要です。
++PythonAnywhereへ反映する場合は、このブランチを取り込んでWebアプリをReloadしてください。
++
++実装：`src/custom_categories.py`、`src/custom_categories.sql`、`src/app.py`、`src/analysis.py`、
++`src/templates/transaction_fields.html`、`src/static/transactions.js`、`src/static/transactions.css`。
++`tests/test_custom_categories.py` で作成・保存・削除、ユーザー分離、履歴保持、入力検証、既存DBの移行を検証します。
++
+ ## レシート読み取り
+ 
+ 上部の「レシート読み取り」から、カメラ撮影または画像ファイルの選択ができます。
+--- /dev/null
++++ b/src/custom_categories.py
+@@ -0,0 +1,85 @@
++"""User-owned categories; archiving preserves the meaning of past records."""
++import sqlite3
++import unicodedata
++from contextlib import closing
++from pathlib import Path
++
++from .categories import CATEGORIES, CATEGORY_LABELS
++
++
++def migrate_custom_categories(database):
++    if not Path(database).is_file():
++        return
++    with closing(sqlite3.connect(database)) as db, db:
++        # This additive migration never rewrites transactions or their labels.
++        schema = Path(__file__).with_name('custom_categories.sql').read_text(encoding='utf-8')
++        db.executescript(schema)
++
++
++def category_key(category_id):
++    return f'custom_{category_id}'
++
++
++def custom_categories(db, user_id, include_archived=False):
++    sql = 'SELECT * FROM custom_categories WHERE user_id = ?'
++    if not include_archived:
++        sql += ' AND is_active = 1'
++    return db.execute(sql + ' ORDER BY id', (user_id,)).fetchall()
++
++
++def category_definitions(db, user_id, include_archived=False):
++    return list(CATEGORIES) + [
++        (category_key(row['id']), row['kind'], '🏷️', row['name'])
++        for row in custom_categories(db, user_id, include_archived)
++    ]
++
++
++def category_labels(db, user_id):
++    labels = dict(CATEGORY_LABELS)
++    labels.update({category_key(row['id']): '🏷️ ' + row['name']
++                   for row in custom_categories(db, user_id, include_archived=True)})
++    return labels
++
++
++def normalized_name(value):
++    return ' '.join(unicodedata.normalize('NFKC', value).split())
++
++
++def create_category(db, user_id, kind, raw_name):
++    name = normalized_name(raw_name)
++    if kind not in ('income', 'expense'):
++        raise ValueError('収入または支出を選んでください。')
++    if not 1 <= len(name) <= 30:
++        raise ValueError('カテゴリ名を1〜30文字で入力してください。')
++    if any(unicodedata.category(char).startswith('C') for char in name):
++        raise ValueError('カテゴリ名に制御文字は使えません。')
++    key_name = name.casefold()
++    if any(normalized_name(label).casefold() == key_name and category_kind == kind
++           for _, category_kind, _, label in CATEGORIES):
++        raise ValueError('同じ名前の標準カテゴリがあります。一覧から選んでください。')
++    with db:
++        # Repeated submissions reuse the same ID. Re-adding an archived name
++        # restores it, so historical and new records remain grouped together.
++        db.execute('''INSERT INTO custom_categories (user_id, kind, name, normalized_name)
++                      VALUES (?, ?, ?, ?)
++                      ON CONFLICT(user_id, kind, normalized_name)
++                      DO UPDATE SET is_active = 1''', (user_id, kind, name, key_name))
++        row = db.execute('''SELECT * FROM custom_categories
++                            WHERE user_id = ? AND kind = ? AND normalized_name = ?''',
++                         (user_id, kind, key_name)).fetchone()
++    return row
++
++
++def archive_category(db, user_id, key):
++    # Match the full opaque key and owner, never a client-supplied user_id.
++    with db:
++        changed = db.execute('''UPDATE custom_categories SET is_active = 0
++                                WHERE user_id = ? AND 'custom_' || id = ?''',
++                             (user_id, key)).rowcount
++    return bool(changed)
++
++
++def custom_category_color(key):
++    if key.startswith('custom_') and key[7:].isdigit():
++        return f'hsl({int(key[7:]) * 137 % 360} 65% 65%)'
++    return '#94a3b8'
+--- /dev/null
++++ b/src/custom_categories.sql
+@@ -0,0 +1,9 @@
++CREATE TABLE IF NOT EXISTS custom_categories (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    user_id INTEGER NOT NULL REFERENCES users(id),
++    kind TEXT NOT NULL CHECK(kind IN ('income', 'expense')),
++    name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 30),
++    normalized_name TEXT NOT NULL,
++    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
++    UNIQUE(user_id, kind, normalized_name)
++);
+--- /dev/null
++++ b/tests/test_custom_categories.py
+@@ -0,0 +1,138 @@
++import sqlite3
++import unittest
++from contextlib import closing
++from pathlib import Path
++
++import test_app as support
++from src.app import create_app, get_db
++from src.analysis import monthly_expense_reports
++from src.custom_categories import migrate_custom_categories
++
++
++class CustomCategoryTest(unittest.TestCase):
++    setUp = support.AppTest.setUp
++    post = support.AppTest.post
++    register = support.AppTest.register
++    login = support.AppTest.login
++
++    def start(self):
++        self.register()
++        self.login()
++
++    def create(self, name='ライブ', kind='expense', **extra):
++        return self.post('/dashboard', {'category_action': 'create',
++                                       'new_category_name': name, 'kind': kind, **extra})
++
++    def transaction(self, key='custom_1', **extra):
++        return {'kind': 'expense', 'category': key, 'amount': '2500',
++                'date': '2026-11-19', 'description': '', **extra}
++
++    def test_create_select_save_edit_and_persist(self):
++        self.start()
++        response = self.create(amount='2500', date='2026-11-19', description='入力途中のメモ')
++        html = response.get_data(as_text=True)
++        self.assertIn('value="custom_1" checked', html)
++        self.assertIn('value="2500"', html)
++        self.assertIn('入力途中のメモ', html)
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM transactions').fetchone()[0], 0)
++        self.assertIn('ライブ', self.client.get('/dashboard').get_data(as_text=True))
++        self.assertEqual(self.post('/dashboard', self.transaction()).status_code, 302)
++        with self.app.app_context():
++            report = monthly_expense_reports(get_db(), 1)[0]
++            self.assertEqual(report['categories'][0]['label'], '🏷️ ライブ')
++            self.assertEqual(report['total'], 2500)
++            self.assertIn('hsl(', report['gradient'])
++        self.assertEqual(self.post('/transactions/1/edit', self.transaction(amount='3000')).status_code, 302)
++        restarted = create_app(dict(self.app.config))
++        with restarted.app_context():
++            self.assertEqual(get_db().execute('SELECT name FROM custom_categories').fetchone()[0], 'ライブ')
++
++    def test_income_kind_and_user_isolation(self):
++        self.start()
++        self.create('特別報酬', 'income')
++        self.assertEqual(self.post('/dashboard', self.transaction()).status_code, 200)
++        self.assertEqual(self.post('/dashboard', self.transaction(kind='income')).status_code, 302)
++        other = self.app.test_client()
++        self.register('bob', other)
++        self.login('bob', other)
++        self.assertNotIn('特別報酬', other.get('/dashboard').get_data(as_text=True))
++        self.assertEqual(self.post('/dashboard', self.transaction(kind='income'), other).status_code, 200)
++        self.assertEqual(self.post('/dashboard', {'delete_category': 'custom_1'}, other).status_code, 404)
++        self.post('/dashboard', {'kind': 'income', 'category_action': 'create',
++                                 'new_category_name': '特別報酬'}, other)
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM custom_categories').fetchone()[0], 2)
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM transactions').fetchone()[0], 1)
++
++    def test_delete_preserves_history_and_only_existing_record_can_keep_it(self):
++        self.start()
++        self.create()
++        self.post('/dashboard', self.transaction())
++        self.post('/dashboard', self.transaction(key='food'))
++        deleted = self.post('/dashboard', {**self.transaction(), 'delete_category': 'custom_1'})
++        html = deleted.get_data(as_text=True)
++        self.assertIn('過去の収支と集計はそのまま', html)
++        self.assertNotIn('value="custom_1"', html)
++        self.assertIn('🏷️ ライブ', html)
++        self.assertEqual(self.post('/dashboard', self.transaction()).status_code, 200)
++        self.assertEqual(self.post('/transactions/2/edit', self.transaction()).status_code, 200)
++        self.assertIn('value="custom_1" checked', self.client.get('/transactions/1/edit').get_data(as_text=True))
++        self.assertEqual(self.post('/transactions/1/edit', self.transaction(amount='3100')).status_code, 302)
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM transactions').fetchone()[0], 2)
++            report = monthly_expense_reports(get_db(), 1)[0]
++            self.assertEqual(report['categories'][0]['label'], '🏷️ ライブ')
++        # Re-adding the same name restores its stable ID and aggregate history.
++        self.create()
++        with self.app.app_context():
++            self.assertEqual(tuple(get_db().execute('SELECT id, is_active FROM custom_categories').fetchone()), (1, 1))
++        self.assertIn('value="custom_1"', self.client.get('/dashboard').get_data(as_text=True))
++
++    def test_names_duplicates_escaping_and_csrf(self):
++        self.start()
++        for name in ['', '   ', 'x' * 31, 'a\x00b', '食費']:
++            self.assertIn('role="alert"', self.create(name).get_data(as_text=True))
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM custom_categories').fetchone()[0], 0)
++        self.create(' ＡＢＣ ')
++        self.create('abc')
++        self.create('ABC', 'income')
++        self.create('<script>x</script>')
++        html = self.client.get('/dashboard').get_data(as_text=True)
++        self.assertIn('&lt;script&gt;x&lt;/script&gt;', html)
++        self.assertNotIn('<script>x</script>', html)
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT COUNT(*) FROM custom_categories').fetchone()[0], 3)
++        self.assertEqual(self.client.post('/dashboard', data={'category_action': 'create', 'new_category_name': 'bad'}).status_code, 400)
++        self.assertEqual(self.client.post('/dashboard', data={'delete_category': 'custom_1'}).status_code, 400)
++        self.assertEqual(self.post('/dashboard', {'delete_category': 'food'}).status_code, 404)
++
++    def test_edit_screen_can_add_without_saving_transaction(self):
++        self.start()
++        self.post('/dashboard', self.transaction(key='food'))
++        response = self.post('/transactions/1/edit', {**self.transaction(key='food', amount='4500'),
++                             'category_action': 'create', 'new_category_name': '旅行準備'})
++        html = response.get_data(as_text=True)
++        self.assertIn('value="custom_1" checked', html)
++        self.assertIn('value="4500"', html)
++        with self.app.app_context():
++            self.assertEqual(get_db().execute('SELECT amount FROM transactions').fetchone()[0], 2500)
++        self.assertEqual(self.post('/transactions/1/edit', self.transaction(amount='4500')).status_code, 302)
++
++    def test_existing_database_migration_is_additive_and_repeatable(self):
++        self.start()
++        self.post('/dashboard', self.transaction(key='food'))
++        path = self.app.config['DATABASE']
++        with closing(sqlite3.connect(path)) as db, db:
++            db.execute('DROP TABLE custom_categories')
++        migrate_custom_categories(path)
++        migrate_custom_categories(path)
++        with closing(sqlite3.connect(path)) as db:
++            self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0], 1)
++            self.assertEqual(db.execute('SELECT amount, category FROM transactions').fetchone(), (2500, 'food'))
++            self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
++
++
++if __name__ == '__main__':
++    unittest.main()

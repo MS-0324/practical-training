@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block page_assets %}
+<link rel="stylesheet" href="{{ url_for('static', filename='receipts.css') }}">
+<script src="{{ url_for('static', filename='receipts.js') }}" defer></script>
+{% endblock %}
+{% macro receipt_row(item) %}
+<tr>
+  <td>
+    <select name="category" aria-label="カテゴリ" required>
+    {% for key, label in receipt_categories %}<option value="{{ key }}" {% if key == item.get('category', 'other_expense') %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <input name="description" aria-label="商品名・メモ" placeholder="読み取った商品名・メモ" maxlength="200" value="{{ item.get('description', '') }}">
+  </td>
+  <td>
+    <div class="receipt-amount"><input type="number" name="amount" aria-label="金額（円）" min="1" max="1000000000" step="1" inputmode="numeric" value="{{ item.get('amount', '') }}" required><span>円</span></div>
+    <button type="button" class="receipt-remove">この行を削除</button>
+  </td>
+</tr>
+{% endmacro %}
+{% block content %}
+<div class="dashboard-heading"><div><p class="analysis-eyebrow">撮影 → 読み取り → 確認して登録</p><h1>レシート読み取り</h1></div><a href="{{ url_for('dashboard') }}">ダッシュボードへ戻る</a></div>
+<p class="analysis-description">商品名・金額を読み取り、支出カテゴリを提案します。確認して「確定」を押すまで家計簿には登録されません。</p>
+{% if not ocr_available %}<p class="receipt-notice" role="status">画像読み取りはまだ設定されていません。管理者にAPIの設定を依頼してください。下の表から手入力で登録することはできます。</p>{% endif %}
+<noscript><p class="receipt-notice">撮影と画像読み取りにはJavaScriptが必要です。ブラウザでJavaScriptを有効にしてください。</p></noscript>
+<section class="receipt-card" aria-labelledby="receipt-source-title">
+  <h2 id="receipt-source-title">1. レシート画像を用意</h2>
+  <div class="receipt-source-actions">
+    <button type="button" id="receipt-camera-start" {% if not ocr_available %}disabled{% endif %}>カメラで撮影</button>
+    <label class="receipt-upload">画像ファイルを選ぶ<input type="file" id="receipt-file" accept="image/jpeg,image/png,image/webp" {% if not ocr_available %}disabled{% endif %}></label>
+  </div>
+  <p class="analysis-note">JPEG・PNG・WebP／8MBまで。レシート全体を明るい場所で、文字にピントを合わせて撮影してください。</p>
+  <div id="receipt-camera" hidden>
+    <video id="receipt-video" autoplay muted playsinline aria-label="レシート撮影プレビュー"></video>
+    <div class="receipt-source-actions"><button type="button" id="receipt-capture">この画像を撮影</button><button type="button" id="receipt-camera-stop">カメラを閉じる</button></div>
+  </div>
+  <p class="analysis-note">カメラが使えない場合は、端末のカメラで撮影した画像を選んでください。スマホのカメラ起動には通常HTTPS接続が必要です。</p>
+  <figure id="receipt-preview-wrap" hidden><img id="receipt-preview" alt="読み取りに使うレシート画像"><figcaption id="receipt-filename"></figcaption></figure>
+  <p class="receipt-notice">「画像を読み取る」を押すと画像をOpenAIに送信します。必要のない個人情報は画像から除いてください。読み取りにはAPI利用料金が発生します。</p>
+  <button type="button" id="receipt-scan" data-url="{{ url_for('receipts.scan') }}" disabled>画像を読み取る</button>
+  <p id="receipt-status" role="status" aria-live="polite"></p>
+</section>
+<section class="receipt-card" aria-labelledby="receipt-review-title">
+  <h2 id="receipt-review-title" tabindex="-1">2. 内容を確認・修正</h2>
+  <p class="analysis-note">カテゴリ欄の下には商品名を表示します。カテゴリ・商品名・金額は編集でき、行の追加・削除もできます。読み取り直すと表の内容が置き換わります。</p>
+  {% for error in errors %}<p role="alert">{{ error }}</p>{% endfor %}
+  <p id="receipt-notes" class="receipt-notice" hidden></p>
+  <form method="post" action="{{ url_for('receipts.review') }}" id="receipt-review-form">
+    {{ action_form.hidden_tag() }}
+    <input type="hidden" name="import_token" value="{{ import_token }}">
+    <p><label for="receipt-date">購入日（全明細共通）</label> <input type="date" name="date" id="receipt-date" value="{{ selected_date }}" required></p>
+    <table class="receipt-table">
+      <caption class="visually-hidden">登録前の支出明細</caption>
+      <thead><tr><th scope="col">カテゴリ・商品名</th><th scope="col">金額</th></tr></thead>
+      <tbody id="receipt-rows">{% for item in items %}{{ receipt_row(item) }}{% endfor %}</tbody>
+    </table>
+    <p id="receipt-empty" {% if items %}hidden{% endif %}>画像を読み取ると、ここに明細が表示されます。</p>
+    <button type="button" id="receipt-add-row">＋ 行を追加</button>
+    <div class="receipt-summary"><span id="receipt-count">{{ items|length }}件</span><strong>登録合計：<output id="receipt-sum">—</output> 円</strong></div>
+    <p id="receipt-total-check" role="status" aria-live="polite"></p>
+    <p class="analysis-note">税・値引き・重複行を確認し、実際に支払った金額になるよう修正してください。値引きは該当商品の金額から差し引き、金額0円の行は削除してください。</p>
+    <label class="receipt-confirm"><input type="checkbox" name="confirmed" value="yes" id="receipt-confirmed" required>画像と照合し、日付・カテゴリ・金額・合計を確認しました。</label>
+    <button type="submit" id="receipt-save">確定して支出を登録</button>
+  </form>
+  <template id="receipt-row-template">{{ receipt_row({}) }}</template>
+</section>
+{% endblock %}

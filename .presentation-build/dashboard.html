@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>収支管理</title>
+    <style>body {
+        background-color: #0b1120;
+        color: #f1f5f9;
+        }</style>
+<style>body { font-family: system-ui, sans-serif; margin: auto; padding: 1rem; max-width: 1100px; }
+body > header { padding: .5rem 0 1.25rem; margin-bottom: 1.5rem; border-bottom: 1px solid #334155; }
+body > header nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+body > header nav > span { margin-left: auto; color: #b6c5d9; overflow-wrap: anywhere; min-width: 0; }
+a { color: #93c5fd; }
+button, input, select, summary { font: inherit; }
+button, summary { cursor: pointer; }
+button, input, select { padding: .55rem; border-radius: .4rem; }
+button { background: #dbeafe; color: #172554; border: 1px solid #93c5fd; }
+#add-panel { margin: 1rem 0; padding: 1rem; background: #172337; border-radius: .7rem; }
+summary { font-weight: bold; color: #bfdbfe; }
+.category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: .5rem; }
+.category-option { display: flex; align-items: center; gap: .3rem; padding: .65rem; border: 1px solid #64748b; border-radius: .5rem; cursor: pointer; }
+.category-option:has(input:checked) { background: #1e40af; border-color: #93c5fd; }
+.category-option[hidden] { display: none; }
+:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+fieldset { border: 1px solid #64748b; border-radius: .5rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #475569; overflow-wrap: anywhere; }
+[role=alert] { color: #fecaca; }
+@media (max-width: 600px) { th, td { padding: .25rem; font-size: .85rem; } .transaction-fields input:not([type=radio]):not([type=hidden]) { box-sizing: border-box; max-width: 100%; } }
+
+/* Monthly reports also render without JavaScript and refresh with <main>. */
+.dashboard-heading, .overview-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.dashboard-heading { margin-bottom: 1.5rem; }
+.dashboard-heading h1 { margin: .4rem 0 0; font-size: 1.8rem; }
+.dashboard-shortcuts { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .9rem; }
+.monthly-overview { padding: 1.5rem; background: #131f32; border: 1px solid #334155; border-radius: 1rem; }
+.overview-heading h2 { margin: 0; font-size: 1.2rem; }
+.overview-heading form { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.overview-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.overview-metrics > div { padding: 1rem; background: #0b1627; border-radius: .6rem; min-width: 0; }
+.overview-metrics span { display: block; color: #b6c5d9; font-size: .85rem; }
+.overview-metrics span small { margin-left: .4rem; }
+.overview-metrics strong { display: block; margin-top: .6rem; font-size: clamp(1.15rem, 2.5vw, 1.7rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.overview-metrics strong small { font-size: .8rem; font-weight: normal; }
+.overview-metrics .budget-unset { color: #b6c5d9; font-size: 1.15rem; }
+.budget-detail { color: #cbd5e1; font-size: .9rem; }
+.budget-detail p:last-child { margin-bottom: 0; }
+.budget-detail span { display: inline-block; margin-left: 1rem; }
+.budget-progress { height: .6rem; background: #334155; border-radius: 1rem; overflow: hidden; }
+.budget-progress > div { height: 100%; background: #34d399; }
+.budget-progress.is-over > div { background: #fb7185; }
+.over-budget { color: #fda4af; }
+#add-panel:target { outline: 2px solid #93c5fd; }
+.transaction-history { margin-top: 2.5rem; scroll-margin-top: 1rem; }
+.transaction-table-scroll { overflow-x: auto; }
+.transaction-table-scroll table { min-width: 620px; }
+.transaction-table-scroll td:first-child, .transaction-table-scroll td:nth-child(3) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.transaction-table-scroll td:nth-child(3) { text-align: right; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.expense-analysis { margin-top: 2.5rem; border-top: 1px solid #475569; padding-top: 1.5rem; }
+.analysis-heading, .report-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.analysis-eyebrow { margin: 0 0 .3rem; font-size: .8rem; letter-spacing: .08em; color: #93c5fd; }
+.analysis-heading h2 { margin: 0; font-size: 1.6rem; }
+.analysis-badge { padding: .4rem .8rem; border: 1px solid #475569; border-radius: 2rem; color: #cbd5e1; white-space: nowrap; }
+.analysis-description { color: #cbd5e1; line-height: 1.8; }
+.analysis-note { color: #b6c5d9; font-size: .8rem; line-height: 1.7; }
+.analysis-months { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.analysis-months a { padding: .45rem .8rem; background: #172337; border: 1px solid #475569; border-radius: .5rem; text-decoration: none; }
+.analysis-months a:hover { background: #253854; }
+.monthly-reports { display: grid; gap: 1.5rem; }
+.monthly-report { min-width: 0; padding: 1.5rem; background: #131f32; border: 1px solid #334155; border-radius: 1rem; scroll-margin-top: 1rem; }
+.monthly-report:target { border-color: #93c5fd; }
+.report-heading { padding-bottom: 1rem; border-bottom: 1px solid #334155; }
+.report-heading h3 { margin: 0; font-size: 1.35rem; }
+.report-heading p { margin: .4rem 0 0; }
+.report-total { text-align: right; font-variant-numeric: tabular-nums; }
+.report-total > span { display: block; color: #b6c5d9; font-size: .8rem; }
+.report-total strong { display: block; margin-top: .25rem; font-size: 1.8rem; }
+.report-total small { font-size: .9rem; font-weight: normal; }
+.report-breakdown { display: grid; grid-template-columns: minmax(200px, .8fr) minmax(0, 1.5fr); align-items: start; gap: 2rem; padding: 1.5rem 0; }
+.expense-figure { margin: 0; display: grid; justify-items: center; gap: 1rem; padding: 1rem 0; }
+.expense-pie { position: relative; width: 260px; max-width: 100%; box-sizing: border-box; aspect-ratio: 1; border-radius: 50%; }
+.expense-pie-separators { position: absolute; inset: 0; border-radius: 50%; }
+.expense-pie-center { position: absolute; inset: 17%; border-radius: 50%; background: #131f32; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; padding: .5rem; }
+.expense-pie-center > span, .expense-pie-center small { color: #b6c5d9; font-size: .75rem; }
+.expense-pie-center strong { max-width: 100%; font-size: 1.2rem; font-variant-numeric: tabular-nums; text-align: center; overflow-wrap: anywhere; }
+.expense-figure figcaption { color: #b6c5d9; font-size: .85rem; }
+.category-breakdown { min-width: 0; }
+.expense-table { font-size: .9rem; }
+.expense-table caption { text-align: left; color: #b6c5d9; font-size: .8rem; padding-bottom: .7rem; }
+.expense-table th, .expense-table td { padding: .65rem .45rem; border-color: #334155; }
+.expense-table thead th { color: #b6c5d9; font-size: .8rem; font-weight: normal; }
+.expense-table tbody th { font-weight: normal; }
+.expense-table td, .expense-table thead th:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.expense-table tbody tr:hover { background: #1e304a; }
+.expense-table tfoot { font-weight: bold; }
+.category-swatch { display: inline-block; width: .85rem; height: .85rem; border-radius: 50%; margin-right: .5rem; border: 1px solid #ffffff80; box-shadow: inset 0 0 0 3px #131f32; vertical-align: middle; }
+.expense-table .expense-category-row > * { border-bottom: 0; padding-bottom: .4rem; }
+.expense-table .expense-category-bar-row td { padding: 0 .45rem .85rem; }
+.expense-category-track { height: .5rem; background: #26364e; border-radius: 1rem; overflow: hidden; }
+.expense-category-track > div { height: 100%; border-radius: inherit; }
+.report-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding-top: 1rem; border-top: 1px solid #334155; }
+.report-insights > div { padding: 1rem; background: #0b1627; border-radius: .6rem; }
+.report-insights dt { font-size: .8rem; color: #b6c5d9; }
+.report-insights dt span { display: inline-block; }
+.report-insights dd { margin: .6rem 0 0; font-size: 1.05rem; font-weight: bold; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.report-insights .insight-detail { font-size: .8rem; font-weight: normal; color: #b6c5d9; line-height: 1.7; }
+.report-insights .expense-increase { color: #fda4af; }
+.report-insights .expense-decrease { color: #6ee7b7; }
+.report-empty, .analysis-empty { padding: 1.5rem; margin: 1rem 0; border: 1px dashed #475569; border-radius: .6rem; color: #cbd5e1; line-height: 1.8; }
+@media (max-width: 700px) {
+  .monthly-overview { padding: 1rem; }
+  .overview-metrics { grid-template-columns: 1fr; gap: .65rem; }
+  .overview-metrics > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .overview-metrics strong { margin: 0; font-size: 1.25rem; }
+  .monthly-report { padding: 1rem; }
+  .report-breakdown { grid-template-columns: 1fr; gap: .5rem; }
+  .report-insights { grid-template-columns: 1fr; gap: .65rem; }
+  .expense-pie { width: 240px; }
+  .report-total strong { font-size: 1.5rem; }
+  .expense-table th, .expense-table td { padding: .65rem .25rem; }
+}
+</style>
+
+
+</head>
+<body>
+<header><nav aria-label="メインナビゲーション">
+
+<a href="/dashboard">ダッシュボード</a>
+<a href="/goals">月間支出目標</a>
+<a href="/receipts">レシート読み取り</a>
+<span>demo@example.com</span>
+<form method="post" action="/logout"><button>ログアウト</button></form>
+
+</nav></header>
+
+<main>
+<div class="dashboard-heading">
+    <div><p class="analysis-eyebrow">毎日の記録から、お金の使い方を知る</p><h1>ダッシュボード</h1></div>
+    <nav class="dashboard-shortcuts" aria-label="ページ内移動">
+        <a href="#add-panel">収支の入力欄 ↓</a>
+        <a href="#expense-analysis">月別グラフ・分析 ↓</a>
+        <a href="#transaction-history">収支一覧 ↓</a>
+    </nav>
+</div>
+<section class="monthly-overview" aria-labelledby="overview-title">
+<div class="overview-heading">
+<h2 id="overview-title">月間支出状況</h2>
+
+<form method="get" action="/dashboard">
+    <label for="month">対象月：</label>
+    <input type="month" id="month" name="month"
+           value="2026-11" required>
+    <button type="submit">表示</button>
+</form>
+</div>
+<div class="overview-metrics">
+    <div><span>収支合計 <small>全期間</small></span><strong>30,000<small> 円</small></strong></div>
+    <div><span>支出合計 <small>2026-11</small></span><strong>40,000<small> 円</small></strong></div>
+    <div><span>残りの予算 <small>2026-11</small></span>
+    <strong class="">10,000<small> 円</small></strong>
+    </div>
+</div>
+<div class="budget-detail">
+
+    <p>支出上限：50,000円 <span>予算使用率：80.0%</span></p>
+    <div class="budget-progress " role="progressbar" aria-label="予算使用率" aria-valuenow="80.0" aria-valuemin="0" aria-valuemax="100" aria-valuetext="80.0%">
+        <div style="width: 80.0%;"></div>
+    </div>
+    
+
+
+<p>
+    <a href="/goals?month=2026-11">
+        この月の支出上限を設定・変更する
+    </a>
+</p>
+</div>
+</section>
+<p id="save-status" role="status" aria-live="polite"></p>
+<details id="add-panel" >
+<summary>＋ 収支を追加</summary>
+<form method="post" action="/dashboard?month=2026-11" data-transaction-form>
+
+<div class="transaction-fields">
+<p><label for="kind">種別</label> <select id="kind" name="kind"><option value="income">収入</option><option selected value="expense">支出</option></select></p>
+<fieldset><legend>カテゴリを選択</legend>
+<div class="category-grid">
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="food"  required>
+<span><span aria-hidden="true">🍚</span> 食費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="dining"  required>
+<span><span aria-hidden="true">🍽️</span> 外食</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="cafe"  required>
+<span><span aria-hidden="true">☕</span> カフェ</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="groceries"  required>
+<span><span aria-hidden="true">🛒</span> 日用品</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="rent"  required>
+<span><span aria-hidden="true">🏠</span> 家賃</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="utilities"  required>
+<span><span aria-hidden="true">💡</span> 水道光熱費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="phone"  required>
+<span><span aria-hidden="true">📱</span> 通信費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="transport"  required>
+<span><span aria-hidden="true">🚃</span> 交通費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="tuition"  required>
+<span><span aria-hidden="true">🎓</span> 学費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="books"  required>
+<span><span aria-hidden="true">📚</span> 書籍・教材</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="supplies"  required>
+<span><span aria-hidden="true">✏️</span> 文房具</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="club"  required>
+<span><span aria-hidden="true">🏫</span> サークル</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="clothes"  required>
+<span><span aria-hidden="true">👕</span> 衣服</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="beauty"  required>
+<span><span aria-hidden="true">✂️</span> 美容</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="medical"  required>
+<span><span aria-hidden="true">💊</span> 医療</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="hobbies"  required>
+<span><span aria-hidden="true">🎮</span> 趣味</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="social"  required>
+<span><span aria-hidden="true">🎉</span> 交際費</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="travel"  required>
+<span><span aria-hidden="true">🧳</span> 旅行</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="subscription"  required>
+<span><span aria-hidden="true">🎬</span> 定額サービス</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="fitness"  required>
+<span><span aria-hidden="true">⚽</span> スポーツ</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="gifts"  required>
+<span><span aria-hidden="true">🎁</span> 贈り物</span>
+</label>
+
+<label class="category-option" data-kind="expense">
+<input type="radio" name="category" value="other_expense"  required>
+<span><span aria-hidden="true">🧾</span> その他の支出</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="part_time"  required>
+<span><span aria-hidden="true">🏪</span> アルバイト</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="salary"  required>
+<span><span aria-hidden="true">💼</span> 給与</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="allowance"  required>
+<span><span aria-hidden="true">🏡</span> 仕送り・お小遣い</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="scholarship"  required>
+<span><span aria-hidden="true">🎓</span> 奨学金</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="side_job"  required>
+<span><span aria-hidden="true">💻</span> 副業</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="sale"  required>
+<span><span aria-hidden="true">📦</span> 不用品販売</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="refund"  required>
+<span><span aria-hidden="true">↩️</span> 返金</span>
+</label>
+
+<label class="category-option" data-kind="income">
+<input type="radio" name="category" value="other_income"  required>
+<span><span aria-hidden="true">💰</span> その他の収入</span>
+</label>
+
+
+</div></fieldset>
+<p><label for="amount">金額（円）</label> <input id="amount" inputmode="numeric" max="1000000000" min="1" name="amount" required step="1" type="number" value=""></p>
+<p><label for="date">日付</label> <input id="date" name="date" required type="date" value="2026-11-19"></p>
+<p><label for="description">メモ（任意）</label> <input id="description" maxlength="200" name="description" type="text" value=""></p>
+
+<input id="submit" name="submit" type="submit" value="保存">
+</div>
+<button type="button" id="cancel-add">キャンセル</button>
+</form>
+</details>
+<section id="expense-analysis" class="expense-analysis" aria-labelledby="analysis-title">
+  <div class="analysis-heading">
+    <div>
+      <p class="analysis-eyebrow">支出のふりかえり</p>
+      <h2 id="analysis-title">月別の支出分析</h2>
+    </div>
+    <span class="analysis-badge">全 2 か月</span>
+  </div>
+  <p class="analysis-description">収支の記録がある全月を新しい順に表示します。円グラフは、その月の支出合計に占めるカテゴリ別の割合です。収入は含みません。</p>
+  
+  <nav class="analysis-months" aria-label="月別分析へ移動">
+    <a href="#expense-2026-11">2026年11月</a><a href="#expense-2026-10">2026年10月</a>
+  </nav>
+  <p class="analysis-note">前月比は直前の暦月と比較します。月の途中の記録や未入力分があると、比較結果も変わります。</p>
+  <div class="monthly-reports">
+    
+    <article id="expense-2026-11" class="monthly-report" aria-labelledby="expense-title-2026-11">
+      <header class="report-heading">
+        <div>
+          <h3 id="expense-title-2026-11">2026年11月</h3>
+          <p class="analysis-note">支出 6 件 ・ 6 カテゴリ</p>
+        </div>
+        <div class="report-total"><span>支出合計</span><strong>40,000<small> 円</small></strong></div>
+      </header>
+      
+      <div class="report-breakdown">
+        <figure class="expense-figure">
+          <div class="expense-pie" role="img" aria-label="2026年11月のカテゴリ別支出のドーナツグラフ。合計40,000円。各カテゴリの金額と割合は内訳表に記載。" style="background: conic-gradient(#60a5fa 0.000000% 45.000000%, #fb923c 45.000000% 60.000000%, #f472b6 60.000000% 75.000000%, #818cf8 75.000000% 87.500000%, #38bdf8 87.500000% 95.000000%, #cbd5e1 95.000000% 100.000000%);">
+            <span class="expense-pie-separators" style="background: conic-gradient(#f8fafc 0.000000000% 0.200000000%, transparent 0.200000000% 44.800000000%, #f8fafc 44.800000000% 45.000000000%, #f8fafc 45.000000000% 45.200000000%, transparent 45.200000000% 59.800000000%, #f8fafc 59.800000000% 60.000000000%, #f8fafc 60.000000000% 60.200000000%, transparent 60.200000000% 74.800000000%, #f8fafc 74.800000000% 75.000000000%, #f8fafc 75.000000000% 75.200000000%, transparent 75.200000000% 87.300000000%, #f8fafc 87.300000000% 87.500000000%, #f8fafc 87.500000000% 87.700000000%, transparent 87.700000000% 94.800000000%, #f8fafc 94.800000000% 95.000000000%, #f8fafc 95.000000000% 95.200000000%, transparent 95.200000000% 99.800000000%, #f8fafc 99.800000000% 100.000000000%);" aria-hidden="true"></span>
+            <span class="expense-pie-center" aria-hidden="true"><span>支出合計</span><strong>40,000</strong><small>円</small></span>
+          </div>
+          <figcaption>カテゴリ別の支出割合</figcaption>
+        </figure>
+        <div class="category-breakdown">
+          <table class="expense-table">
+            <caption>2026年11月の支出内訳（金額順）</caption>
+            <thead><tr><th scope="col">カテゴリ</th><th scope="col">金額</th><th scope="col">割合</th></tr></thead>
+            <tbody>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #60a5fa;" aria-hidden="true"></span>🍚 食費</th>
+                <td>18,000 円</td>
+                <td>45.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 45.0%; background-color: #60a5fa;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #fb923c;" aria-hidden="true"></span>🍽️ 外食</th>
+                <td>6,000 円</td>
+                <td>15.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 15.0%; background-color: #fb923c;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #f472b6;" aria-hidden="true"></span>🚃 交通費</th>
+                <td>6,000 円</td>
+                <td>15.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 15.0%; background-color: #f472b6;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #818cf8;" aria-hidden="true"></span>📚 書籍・教材</th>
+                <td>5,000 円</td>
+                <td>12.5%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 12.5%; background-color: #818cf8;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #38bdf8;" aria-hidden="true"></span>🎮 趣味</th>
+                <td>3,000 円</td>
+                <td>7.5%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 7.5%; background-color: #38bdf8;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #cbd5e1;" aria-hidden="true"></span>🧾 その他の支出</th>
+                <td>2,000 円</td>
+                <td>5.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 5.0%; background-color: #cbd5e1;"></div></div></td>
+              </tr>
+              
+            </tbody>
+            <tfoot><tr><th scope="row">合計</th><td>40,000 円</td><td>100%</td></tr></tfoot>
+          </table>
+          <p class="analysis-note">割合は小数第1位に丸めているため、合計が100%にならない場合があります。</p>
+        </div>
+      </div>
+      
+      <dl class="report-insights">
+        <div>
+          <dt>最も支出が多いカテゴリ</dt>
+          
+          <dd>🍚 食費</dd>
+          <dd class="insight-detail">18,000 円 ・ 45.0%</dd>
+          
+        </div>
+        <div>
+          <dt>前月比 <span>（2026-10）</span></dt>
+          
+          <dd class="expense-decrease">−10,000 円</dd>
+          <dd class="insight-detail">20.0% 減少</dd>
+          
+        </div>
+        <div>
+          <dt>支出1件あたりの平均</dt>
+          <dd>6,667 円</dd>
+          <dd class="insight-detail">支出合計 ÷ 6 件（円単位に丸め）</dd>
+        </div>
+      </dl>
+    </article>
+    
+    <article id="expense-2026-10" class="monthly-report" aria-labelledby="expense-title-2026-10">
+      <header class="report-heading">
+        <div>
+          <h3 id="expense-title-2026-10">2026年10月</h3>
+          <p class="analysis-note">支出 3 件 ・ 3 カテゴリ</p>
+        </div>
+        <div class="report-total"><span>支出合計</span><strong>50,000<small> 円</small></strong></div>
+      </header>
+      
+      <div class="report-breakdown">
+        <figure class="expense-figure">
+          <div class="expense-pie" role="img" aria-label="2026年10月のカテゴリ別支出のドーナツグラフ。合計50,000円。各カテゴリの金額と割合は内訳表に記載。" style="background: conic-gradient(#60a5fa 0.000000% 50.000000%, #fb923c 50.000000% 80.000000%, #f472b6 80.000000% 100.000000%);">
+            <span class="expense-pie-separators" style="background: conic-gradient(#f8fafc 0.000000000% 0.200000000%, transparent 0.200000000% 49.800000000%, #f8fafc 49.800000000% 50.000000000%, #f8fafc 50.000000000% 50.200000000%, transparent 50.200000000% 79.800000000%, #f8fafc 79.800000000% 80.000000000%, #f8fafc 80.000000000% 80.200000000%, transparent 80.200000000% 99.800000000%, #f8fafc 99.800000000% 100.000000000%);" aria-hidden="true"></span>
+            <span class="expense-pie-center" aria-hidden="true"><span>支出合計</span><strong>50,000</strong><small>円</small></span>
+          </div>
+          <figcaption>カテゴリ別の支出割合</figcaption>
+        </figure>
+        <div class="category-breakdown">
+          <table class="expense-table">
+            <caption>2026年10月の支出内訳（金額順）</caption>
+            <thead><tr><th scope="col">カテゴリ</th><th scope="col">金額</th><th scope="col">割合</th></tr></thead>
+            <tbody>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #60a5fa;" aria-hidden="true"></span>🍚 食費</th>
+                <td>25,000 円</td>
+                <td>50.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 50.0%; background-color: #60a5fa;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #fb923c;" aria-hidden="true"></span>🍽️ 外食</th>
+                <td>15,000 円</td>
+                <td>30.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 30.0%; background-color: #fb923c;"></div></div></td>
+              </tr>
+              
+              <tr class="expense-category-row">
+                <th scope="row"><span class="category-swatch" style="background-color: #f472b6;" aria-hidden="true"></span>🚃 交通費</th>
+                <td>10,000 円</td>
+                <td>20.0%</td>
+              </tr>
+              <tr class="expense-category-bar-row" aria-hidden="true">
+                <td colspan="3"><div class="expense-category-track"><div style="width: 20.0%; background-color: #f472b6;"></div></div></td>
+              </tr>
+              
+            </tbody>
+            <tfoot><tr><th scope="row">合計</th><td>50,000 円</td><td>100%</td></tr></tfoot>
+          </table>
+          <p class="analysis-note">割合は小数第1位に丸めているため、合計が100%にならない場合があります。</p>
+        </div>
+      </div>
+      
+      <dl class="report-insights">
+        <div>
+          <dt>最も支出が多いカテゴリ</dt>
+          
+          <dd>🍚 食費</dd>
+          <dd class="insight-detail">25,000 円 ・ 50.0%</dd>
+          
+        </div>
+        <div>
+          <dt>前月比 <span>（2026-09）</span></dt>
+          <dd class="insight-detail">前月の収支記録がないため比較できません。</dd>
+        </div>
+        <div>
+          <dt>支出1件あたりの平均</dt>
+          <dd>16,667 円</dd>
+          <dd class="insight-detail">支出合計 ÷ 3 件（円単位に丸め）</dd>
+        </div>
+      </dl>
+    </article>
+    
+  </div>
+  
+</section>
+<section id="transaction-history" class="transaction-history" aria-labelledby="history-title">
+<h2 id="history-title">収支一覧</h2>
+<p class="analysis-note">全期間の記録を新しい順に表示します。</p>
+<div class="transaction-table-scroll" role="region" aria-label="全期間の収支一覧" tabindex="0">
+<table><caption class="visually-hidden">自分の収支一覧</caption>
+<thead><tr><th>日付</th><th>種別</th><th>金額（円）</th><th>カテゴリ</th><th>メモ</th><th>操作</th></tr></thead>
+<tbody>
+<tr><td>2026-11-10</td><td>支出</td><td>2,000</td><td>🧾 その他の支出</td><td>その他</td>
+<td><a href="/transactions/7/edit">更新</a>
+<form method="post" action="/transactions/7/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-09</td><td>支出</td><td>3,000</td><td>🎮 趣味</td><td>趣味</td>
+<td><a href="/transactions/6/edit">更新</a>
+<form method="post" action="/transactions/6/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-08</td><td>支出</td><td>5,000</td><td>📚 書籍・教材</td><td>参考書</td>
+<td><a href="/transactions/5/edit">更新</a>
+<form method="post" action="/transactions/5/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-07</td><td>支出</td><td>6,000</td><td>🚃 交通費</td><td>通学</td>
+<td><a href="/transactions/4/edit">更新</a>
+<form method="post" action="/transactions/4/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-06</td><td>支出</td><td>6,000</td><td>🍽️ 外食</td><td>友人との外食</td>
+<td><a href="/transactions/3/edit">更新</a>
+<form method="post" action="/transactions/3/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-05</td><td>支出</td><td>18,000</td><td>🍚 食費</td><td>食料品</td>
+<td><a href="/transactions/2/edit">更新</a>
+<form method="post" action="/transactions/2/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-11-01</td><td>収入</td><td>60,000</td><td>🏪 アルバイト</td><td>アルバイト</td>
+<td><a href="/transactions/1/edit">更新</a>
+<form method="post" action="/transactions/1/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-10-10</td><td>支出</td><td>10,000</td><td>🚃 交通費</td><td>交通費</td>
+<td><a href="/transactions/11/edit">更新</a>
+<form method="post" action="/transactions/11/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-10-08</td><td>支出</td><td>15,000</td><td>🍽️ 外食</td><td>外食</td>
+<td><a href="/transactions/10/edit">更新</a>
+<form method="post" action="/transactions/10/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-10-05</td><td>支出</td><td>25,000</td><td>🍚 食費</td><td>食料品</td>
+<td><a href="/transactions/9/edit">更新</a>
+<form method="post" action="/transactions/9/delete"><button>削除</button></form></td></tr>
+
+<tr><td>2026-10-01</td><td>収入</td><td>60,000</td><td>🏪 アルバイト</td><td>アルバイト</td>
+<td><a href="/transactions/8/edit">更新</a>
+<form method="post" action="/transactions/8/delete"><button>削除</button></form></td></tr>
+</tbody></table>
+</div>
+</section>
+</main>
+</body></html>
