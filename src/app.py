@@ -117,6 +117,7 @@ def create_app(test_config=None):
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     migrate_categories(app.config['DATABASE'])
     migrate_custom_categories(app.config['DATABASE'])
+<<<<<<< HEAD
     migrate_receipts(app.config['DATABASE'])
 
     # Set limits before CSRFProtect parses multipart data. Other forms retain 16KB.
@@ -127,6 +128,8 @@ def create_app(test_config=None):
         elif request.endpoint == 'receipts.review':
             request.max_content_length = 256 * 1024
 
+=======
+>>>>>>> 849e15a8137cda9bd9bd59063b804bbdd1f7fb57
     CSRFProtect(app)
     manager = LoginManager(app)
     manager.login_view = 'login'

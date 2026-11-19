@@ -22,11 +22,14 @@ CREATE TABLE IF NOT EXISTS custom_categories (
     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
     UNIQUE(user_id, kind, normalized_name)
 );
+<<<<<<< HEAD
 CREATE TABLE IF NOT EXISTS receipt_imports (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+=======
+>>>>>>> 849e15a8137cda9bd9bd59063b804bbdd1f7fb57
 CREATE TABLE IF NOT EXISTS monthly_spending_goals (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),

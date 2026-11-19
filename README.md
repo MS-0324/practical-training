@@ -118,6 +118,7 @@ PythonAnywhereへ反映する場合は、このブランチを取り込んでWeb
 実装：`src/custom_categories.py`、`src/custom_categories.sql`、`src/app.py`、`src/analysis.py`、
 `src/templates/transaction_fields.html`、`src/static/transactions.js`、`src/static/transactions.css`。
 `tests/test_custom_categories.py` で作成・保存・削除、ユーザー分離、履歴保持、入力検証、既存DBの移行を検証します。
+<<<<<<< HEAD
 
 ## レシート読み取り
 
@@ -165,3 +166,5 @@ python -m flask --app src.app:create_app run --debug
 テストではAPI通信を模擬し、料金を発生させずに抽出・修正・一括保存・重複防止・エラーを検証します。
 
 公式資料：[画像入力](https://developers.openai.com/api/docs/guides/images-vision)、[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)、[ChatGPTとAPIの課金](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform)。
+=======
+>>>>>>> 849e15a8137cda9bd9bd59063b804bbdd1f7fb57
