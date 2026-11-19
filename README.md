@@ -98,3 +98,23 @@ PCではグラフと内訳表を左右に、スマホでは上下に配置しま
 `src/app.py` が結果を `src/templates/expense_reports.html` に渡します。
 円グラフは集計値に基づくCSSの `conic-gradient` で描画するため、外部CDNやJavaScriptには依存しません。
 `tests/test_analysis.py` と `tests/test_app.py` で集計、ユーザー分離、年越しの前月比、空データ、保存後の更新を検証します。
+
+## 自分のカテゴリを追加・削除する
+
+収支の入力欄で「その他」を選ぶか、「＋ 自分のカテゴリを追加」を開きます。
+名前を1〜30文字で入力して「追加して選択」を押すと、既存のカテゴリと同じ一覧に追加され、選択状態になります。
+収入用・支出用を分けてログインユーザーごとに保存するため、次回のログイン後や別端末からも選べます。
+カテゴリの追加だけでは収支は保存しません。入力途中の金額・日付・メモは維持されます。
+
+「作成したカテゴリを管理・削除」から自分のカテゴリを削除できます。
+削除後は新しい収支の選択肢から外れますが、過去の収支・カテゴリ名・円グラフの集計は残ります。
+過去の収支を更新するときも、その収支に付いていたカテゴリは維持できます。
+同じ種類・同じ名前で再追加すると以前のカテゴリを復元します。標準カテゴリは削除できません。
+追加カテゴリは収支一覧と月別分析にも反映されます。
+
+既存DBには起動時に `custom_categories` テーブルを追加します。既存の収支の書き換えやDB初期化のやり直しは不要です。
+PythonAnywhereへ反映する場合は、このブランチを取り込んでWebアプリをReloadしてください。
+
+実装：`src/custom_categories.py`、`src/custom_categories.sql`、`src/app.py`、`src/analysis.py`、
+`src/templates/transaction_fields.html`、`src/static/transactions.js`、`src/static/transactions.css`。
+`tests/test_custom_categories.py` で作成・保存・削除、ユーザー分離、履歴保持、入力検証、既存DBの移行を検証します。

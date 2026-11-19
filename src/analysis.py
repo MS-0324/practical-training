@@ -1,6 +1,7 @@
 """Monthly expense reports built from the signed-in user's records."""
 
-from .categories import CATEGORIES, CATEGORY_LABELS
+from .categories import CATEGORIES
+from .custom_categories import category_labels, custom_category_color
 
 
 # A category keeps the same color even when its rank changes between months.
@@ -19,6 +20,7 @@ def monthly_expense_reports(db, user_id):
     Income creates a month entry but is excluded from expense totals and pies.
     Comparisons always refer to the preceding calendar month, even across years.
     """
+    labels = category_labels(db, user_id)
     rows = db.execute(
         '''SELECT substr(date, 1, 7) AS month, kind, category,
                   SUM(amount) AS amount, COUNT(*) AS count
@@ -43,9 +45,9 @@ def monthly_expense_reports(db, user_id):
         report['count'] += row['count']
         report['categories'].append({
             'key': row['category'],
-            'label': CATEGORY_LABELS.get(row['category'], '未分類'),
+            'label': labels.get(row['category'], '未分類'),
             'amount': row['amount'],
-            'color': EXPENSE_COLORS.get(row['category'], '#94a3b8'),
+            'color': EXPENSE_COLORS.get(row['category'], custom_category_color(row['category'])),
         })
 
     for month, report in reports.items():

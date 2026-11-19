@@ -13,6 +13,16 @@ summary { font-weight: bold; color: #bfdbfe; }
 .category-option { display: flex; align-items: center; gap: .3rem; padding: .65rem; border: 1px solid #64748b; border-radius: .5rem; cursor: pointer; }
 .category-option:has(input:checked) { background: #1e40af; border-color: #93c5fd; }
 .category-option[hidden] { display: none; }
+.category-option { min-width: 0; overflow-wrap: anywhere; }
+.category-creator, .category-manager { margin-top: 1rem; }
+.category-create-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.category-create-controls input { max-width: 100%; box-sizing: border-box; }
+.category-manager ul { padding: 0; list-style: none; }
+.category-manager li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid #334155; }
+.category-manager li > span { overflow-wrap: anywhere; min-width: 0; }
+.category-manager small { color: #b6c5d9; }
+.category-manager button { flex-shrink: 0; }
+[data-category-status]:empty { display: none; }
 :focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
 fieldset { border: 1px solid #64748b; border-radius: .5rem; }
 table { width: 100%; border-collapse: collapse; }
